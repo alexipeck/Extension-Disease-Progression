@@ -43,7 +43,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         public override void Initialize()
         {
             ModelCore.UI.WriteLine("Species selected for disease progression:");
-            SiteVars.Initialize(ModelCore);
+            SiteVars.Initialize(ModelCore, parameters);
             foreach (string speciesName in parameters.SpeciesTransitionMatrix.Keys) {
                 ModelCore.UI.WriteLine($"{speciesName}");
             }

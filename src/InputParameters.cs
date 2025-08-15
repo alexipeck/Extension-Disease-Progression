@@ -4,11 +4,24 @@ using Landis.Utilities;
 
 namespace Landis.Extension.Disturbance.DiseaseProgression
 {
+    public enum DispersalProbabilityAlgorithm { PowerLaw, NegativeExponent };
+    public interface IInputParameters
+    {
+        int Timestep {get;set;}
+        Dictionary<string, Dictionary<string, double>> SpeciesTransitionMatrix { get; set; }
+        string GetTransitionMatrixOutcome(string speciesName, bool outputProbability);
+        DispersalProbabilityAlgorithm DispersalProbabilityAlgorithm { get; set; }
+        int DispersalMaxDistance { get; set; }
+        double AlphaCoefficient { get; set; }
+    }
     public class InputParameters
         : IInputParameters
     {
         private int timestep;
         private Dictionary<string, Dictionary<string, double>> speciesTransitionMatrix;
+        private DispersalProbabilityAlgorithm dispersalType;
+        private int dispersalMaxDistance;
+        private double alphaCoefficient;
         public Dictionary<string, Dictionary<string, double>> SpeciesTransitionMatrix
         {
             get {
@@ -19,8 +32,35 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
         }
 
-        public InputParameters()
-        {}
+        public DispersalProbabilityAlgorithm DispersalProbabilityAlgorithm
+        {
+            get {
+                return dispersalType;
+            }
+            set {
+                dispersalType = value;
+            }
+        }
+        public int DispersalMaxDistance
+        {
+            get {
+                return dispersalMaxDistance;
+            }
+            set {
+                dispersalMaxDistance = value;
+            }
+        }
+        public double AlphaCoefficient
+        {
+            get {
+                return alphaCoefficient;
+            }
+            set {
+                alphaCoefficient = value;
+            }
+        }
+
+        public InputParameters() {}
         public int Timestep
         {
             get {
@@ -54,5 +94,6 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
             return null;
         }
+        
     }
 }

@@ -26,6 +26,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
 
         protected override IInputParameters Parse()
         {
+            Type.SetDescription<DispersalProbabilityAlgorithm>("Dispersal Probability Algorithm");
+            InputValues.Register<DispersalProbabilityAlgorithm>(DispersalProbabilityAlgorithmParser);
             InputParameters parameters = new InputParameters();
 
             InputVar<int> timestep = new InputVar<int>("Timestep");
@@ -124,8 +126,32 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
             
             PlugIn.ModelCore.UI.WriteLine("Finished reading species matrix file");
+
+            InputVar<DispersalProbabilityAlgorithm> dispersalType = new InputVar<DispersalProbabilityAlgorithm>("DispersalProbabilityAlgorithm");
+            ReadVar(dispersalType);
+            PlugIn.ModelCore.UI.WriteLine($"Dispersal type: {dispersalType.Value}");
+            parameters.DispersalProbabilityAlgorithm = dispersalType.Value;
+
+            InputVar<int> dispersalMaximumDistance = new InputVar<int>("DispersalMaximumDistance");
+            ReadVar(dispersalMaximumDistance);
+            PlugIn.ModelCore.UI.WriteLine($"Dispersal maximum distance: {dispersalMaximumDistance.Value}");
+            parameters.DispersalMaxDistance = dispersalMaximumDistance.Value;
+
+            InputVar<double> alpha_coefficient = new InputVar<double>("AlphaCoefficient");
+            ReadVar(alpha_coefficient); 
+            PlugIn.ModelCore.UI.WriteLine($"Alpha coefficient: {alpha_coefficient.Value}");
+            parameters.AlphaCoefficient = alpha_coefficient.Value;
             
             return parameters;
+        }
+
+        public static DispersalProbabilityAlgorithm DispersalProbabilityAlgorithmParser(string text)
+        {
+            if (text == "NegativeExponent")
+                return DispersalProbabilityAlgorithm.NegativeExponent;
+            else if (text == "PowerLaw")
+                return DispersalProbabilityAlgorithm.PowerLaw;
+            throw new System.FormatException("Valid algorithms: NegativeExponent, PowerLaw");
         }
     }
 }
