@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Dynamic;
 using Landis.Library.UniversalCohorts;
+using System.Diagnostics;
+using System;
 
 namespace Landis.Extension.Disturbance.DiseaseProgression
 {
@@ -62,9 +64,71 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             bool debugOnlyOneTransferPerSitePerTimestep = false;
             bool debugOutputTransitions = true;
             bool debugDumpSiteInformation = false;
+            bool disableDispersal = false;
             ////////
+            ///
+            
             
             IEnumerable<ActiveSite> sites = ModelCore.Landscape.ActiveSites;
+
+            ////////////////////
+            // stores literal site positions
+            HashSet<(int x, int y)> healthySites = new HashSet<(int x, int y)>();
+            HashSet<(int x, int y)> infectedSites = new HashSet<(int x, int y)>();
+
+            // infection detection & adjustment pass
+            foreach (ActiveSite site in sites) {
+
+                bool containsHealthySpecies = false;
+                bool containsInfectedSpecies = false;
+                foreach (ISpeciesCohorts speciesCohorts in SiteVars.Cohorts[site]) {
+                    if (speciesCohorts.Species.Name == parameters.DerivedHealthySpecies) {
+                        containsHealthySpecies = true;
+                    } else if (parameters.TransitionMatrixContainsSpecies(speciesCohorts.Species.Name)) {
+                        containsInfectedSpecies = true;
+                    }
+                }
+                var siteLocation = site.Location;
+                if (containsHealthySpecies && !containsInfectedSpecies) {
+                    healthySites.Add((siteLocation.Row, siteLocation.Column));
+                } else if (containsInfectedSpecies) {
+                    infectedSites.Add((siteLocation.Row, siteLocation.Column));
+                }
+            }
+
+            // compute relative site positions
+            // compute cumulative probability of infection
+            // TODO: This method may not agree with the data we have for infection
+            //       which I assume just tells us the probability of a cohort becoming infected
+            //       rather than being the probabilty of any infected cohort infecting another
+            // Assuming that every infected site can infect any healthy site, I should be able
+            // to do a nested loop for healthy->infected  and store the relative positions
+            // then hold an accumilated probability for every healthy site, performing one RNG per healthy
+            // site to determine whether it becomes infected.
+            foreach ((int x, int y) healthySite in healthySites) {
+                double cumulativeDispersalProbability = 0.0;
+                foreach ((int x, int y) infectedSite in infectedSites) {
+                    //TODO: Ensure that the index offset is the healthy site relative
+                    //      to the infected siteas the infected site is the source.
+                    (int x, int y) relativeGridOffset = SiteVars.CalculateRelativeGridOffset(infectedSite.x, infectedSite.y, healthySite.x, healthySite.y);
+                    double dispersalProbability = SiteVars.GetDispersalProbability(relativeGridOffset.x, relativeGridOffset.y);
+                    Debug.Assert(dispersalProbability >= 0.0 && dispersalProbability <= 1.0);
+                    cumulativeDispersalProbability += dispersalProbability;
+                }
+                if (cumulativeDispersalProbability > 1.0) {
+                    cumulativeDispersalProbability = 1.0;
+                }
+                if (cumulativeDispersalProbability == 0.0) {
+                    continue;
+                }
+                Random rand = new Random();
+                double random = rand.NextDouble();
+                if (random <= cumulativeDispersalProbability) {
+                    infectedSites.Add(healthySite);
+                }
+            }
+            healthySites.Clear();
+            ///////////////////
             
             // Species string to ISpecies lookup
             Dictionary<string, ISpecies> speciesNameToISpecies = new Dictionary<string, ISpecies>();
@@ -89,7 +153,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 bool hasTransitioned = false;
                 foreach (ISpeciesCohorts speciesCohorts in siteCohorts) {
                     SpeciesCohorts concreteSpeciesCohorts = (SpeciesCohorts)speciesCohorts;
-                    foreach (var (cohort, index) in concreteSpeciesCohorts.Select((cohort, index) => (cohort, index))) {
+                    foreach (ICohort cohort in concreteSpeciesCohorts) {
                         Cohort concreteCohort = (Cohort)cohort;
 
                         //process entry through matrix

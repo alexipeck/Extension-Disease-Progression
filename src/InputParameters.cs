@@ -10,6 +10,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         int Timestep {get;set;}
         Dictionary<string, Dictionary<string, double>> SpeciesTransitionMatrix { get; set; }
         string GetTransitionMatrixOutcome(string speciesName, bool outputProbability);
+        bool TransitionMatrixContainsSpecies(string speciesName);
+        string DerivedHealthySpecies { get; set; }
         DispersalProbabilityAlgorithm DispersalProbabilityAlgorithm { get; set; }
         int DispersalMaxDistance { get; set; }
         double AlphaCoefficient { get; set; }
@@ -19,6 +21,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
     {
         private int timestep;
         private Dictionary<string, Dictionary<string, double>> speciesTransitionMatrix;
+        private string derivedHealthySpecies;
         private DispersalProbabilityAlgorithm dispersalType;
         private int dispersalMaxDistance;
         private double alphaCoefficient;
@@ -50,6 +53,16 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 dispersalMaxDistance = value;
             }
         }
+
+        public string DerivedHealthySpecies
+        {
+            get {
+                return derivedHealthySpecies;
+            }
+            set {
+                derivedHealthySpecies = value;
+            }
+        }
         public double AlphaCoefficient
         {
             get {
@@ -72,6 +85,10 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                                                       "Value must be = or > 0.");
                 timestep = value;
             }
+        }
+
+        public bool TransitionMatrixContainsSpecies(string speciesName) {
+            return speciesTransitionMatrix.ContainsKey(speciesName);
         }
         public string GetTransitionMatrixOutcome(string speciesName, bool outputProbability) {
             if (!speciesTransitionMatrix.TryGetValue(speciesName, out Dictionary<string, double> species_transitions)) {

@@ -18,8 +18,18 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             indexOffsetDispersalProbabilityDictionary = GenerateDispersalLookupMatrix(parameters.DispersalProbabilityAlgorithm, parameters.AlphaCoefficient, PlugIn.ModelCore.CellLength, landscapeX, landscapeY);
         }
 
+        public static (int x, int y) CalculateRelativeGridOffset(int x1, int y1, int x2, int y2) {
+            return (x2 - x1, y2 - y1);
+        }
+
         private static double CalculateEuclideanDistance(int x1, int y1, int x2, int y2) {
             return Math.Sqrt(Math.Pow(x2 - x1, 2) + Math.Pow(y2 - y1, 2));
+        }
+
+        public static double GetDispersalProbability(int x, int y) {
+            // direct indexing without error case should be safe as a probability
+            // should have be engenerated for every valid index
+            return indexOffsetDispersalProbabilityDictionary[(x, y)];
         }
 
         private static Dictionary<(int x, int y), double> GenerateDispersalLookupMatrix(DispersalProbabilityAlgorithm dispersalType, double alphaCoefficient, float cellLength, int landscapeX, int landscapeY) {

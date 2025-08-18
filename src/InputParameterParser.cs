@@ -2,6 +2,7 @@
 using Landis.Core;
 using System.Collections.Generic;
 using Landis.Utilities;
+using System.Diagnostics;
 
 namespace Landis.Extension.Disturbance.DiseaseProgression
 {
@@ -112,6 +113,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 }
             }
             parameters.SpeciesTransitionMatrix = speciesTransitionMatrix;
+            Debug.Assert(speciesOrderList.Count >= 2);
+            PlugIn.ModelCore.UI.WriteLine($"Derived healthy species: {speciesOrderList[0]}");
+            parameters.DerivedHealthySpecies = speciesOrderList[0];
             
             PlugIn.ModelCore.UI.WriteLine("Species Transition Matrix:");
             foreach (var outerEntry in speciesTransitionMatrix)
