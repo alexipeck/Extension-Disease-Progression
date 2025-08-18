@@ -44,7 +44,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             
             // dynamically sized matrix ingestion
             var speciesOrderList = new List<string>();
-            var speciesTransitionMatrix = new Dictionary<string, Dictionary<string, double>>();
+            var speciesTransitionMatrix = new Dictionary<string, List<(string, double)>>();
             int lineNum = 0;
             List<string> columnHeaders = null;
             
@@ -84,32 +84,36 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 }
                 
                 speciesOrderList.Add(sourceSpecies);
-                speciesTransitionMatrix[sourceSpecies] = new Dictionary<string, double>();
+                speciesTransitionMatrix[sourceSpecies] = new List<(string, double)>();
                 
                 for (int i = 1; i < columns.Length; i++) {
-                    if (!double.TryParse(columns[i], out double probability)) {
-                        throw new InputValueException(columns[i], $"Invalid probability value '{columns[i]}' on line {lineNum}, column {i + 1}.");
+                    if (!double.TryParse(columns[i], out double proportion)) {
+                        throw new InputValueException(columns[i], $"Invalid proportion value '{columns[i]}' on line {lineNum}, column {i + 1}.");
                     }
-                    if (probability < 0.0) {
-                        throw new InputValueException(columns[i], $"Probability value '{columns[i]}' on line {lineNum}, column {i + 1} must not be less than 0.0");
+                    if (proportion < 0.0) {
+                        throw new InputValueException(columns[i], $"Proportion value '{columns[i]}' on line {lineNum}, column {i + 1} must not be less than 0.0");
                     }
-                    if (probability > 1.0) {
-                        throw new InputValueException(columns[i], $"Probability value '{columns[i]}' on line {lineNum}, column {i + 1} must be less than or equal to 1.0");
+                    if (proportion > 1.0) {
+                        throw new InputValueException(columns[i], $"Proportion value '{columns[i]}' on line {lineNum}, column {i + 1} must be less than or equal to 1.0");
                     }
                     
                     var targetSpecies = columnHeaders[i];
-                    if (probability > 0.0) {
-                        speciesTransitionMatrix[sourceSpecies][targetSpecies] = probability;
+                    if (proportion > 0.0) {
+                        speciesTransitionMatrix[sourceSpecies].Add((targetSpecies, proportion));
                     }
                 }
             }
             foreach (var species in speciesTransitionMatrix) {
-                double totalProbability = 0.0;
-                foreach (var transition in species.Value) {
-                    totalProbability += transition.Value;
+                double totalSpecifiedProportion = 0.0;
+                foreach ((string transitionToSpecies, double proportion) in species.Value) {
+                    totalSpecifiedProportion += proportion;
                 }
-                if (totalProbability > 1.0) {
-                    throw new InputValueException(species.Key, $"Probabilities for species '{species.Key}' must sum to 1.0 or less (current sum: {totalProbability}).");
+                if (totalSpecifiedProportion > 1.0) {
+                    throw new InputValueException(species.Key, $"Proportions for species '{species.Key}' must sum to 1.0 or less (current sum: {totalSpecifiedProportion}).");
+                }
+                if (totalSpecifiedProportion != 1.0) {
+                    species.Value.Insert(0, (null, 1.0 - totalSpecifiedProportion));
+                    PlugIn.ModelCore.UI.WriteLine($"Adding remaining proportion for {species.Key} ({1.0 - totalSpecifiedProportion}) to indicate no change.");
                 }
             }
             parameters.SpeciesTransitionMatrix = speciesTransitionMatrix;
@@ -121,14 +125,11 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             foreach (var outerEntry in speciesTransitionMatrix)
             {
                 PlugIn.ModelCore.UI.WriteLine($"  Source Species: {outerEntry.Key}");
-                foreach (var innerEntry in outerEntry.Value)
+                foreach ((string transitionToSpecies, double proportion) in outerEntry.Value)
                 {
-                    if (outerEntry.Key != innerEntry.Key) {
-                        PlugIn.ModelCore.UI.WriteLine($"    Target: {innerEntry.Key}, Probability: {innerEntry.Value * 100}%");
-                    }
+                    PlugIn.ModelCore.UI.WriteLine($"    Target: {((transitionToSpecies == null) ? outerEntry.Key : transitionToSpecies)}, Proportion: {proportion * 100}%");
                 }
-            }
-            
+            }            
             PlugIn.ModelCore.UI.WriteLine("Finished reading species matrix file");
 
             InputVar<DispersalProbabilityAlgorithm> dispersalType = new InputVar<DispersalProbabilityAlgorithm>("DispersalProbabilityAlgorithm");

@@ -8,8 +8,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
     public interface IInputParameters
     {
         int Timestep {get;set;}
-        Dictionary<string, Dictionary<string, double>> SpeciesTransitionMatrix { get; set; }
-        string GetTransitionMatrixOutcome(string speciesName, bool outputProbability);
+        Dictionary<string, List<(string, double)>> SpeciesTransitionMatrix { get; set; }
+        List<(string, double)> GetTransitionMatrixDistribution(string speciesName);
         bool TransitionMatrixContainsSpecies(string speciesName);
         string DerivedHealthySpecies { get; set; }
         DispersalProbabilityAlgorithm DispersalProbabilityAlgorithm { get; set; }
@@ -20,12 +20,12 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         : IInputParameters
     {
         private int timestep;
-        private Dictionary<string, Dictionary<string, double>> speciesTransitionMatrix;
+        private Dictionary<string, List<(string, double)>> speciesTransitionMatrix;
         private string derivedHealthySpecies;
         private DispersalProbabilityAlgorithm dispersalType;
         private int dispersalMaxDistance;
         private double alphaCoefficient;
-        public Dictionary<string, Dictionary<string, double>> SpeciesTransitionMatrix
+        public Dictionary<string, List<(string, double)>> SpeciesTransitionMatrix
         {
             get {
                 return speciesTransitionMatrix;
@@ -90,26 +90,11 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         public bool TransitionMatrixContainsSpecies(string speciesName) {
             return speciesTransitionMatrix.ContainsKey(speciesName);
         }
-        public string GetTransitionMatrixOutcome(string speciesName, bool outputProbability) {
-            if (!speciesTransitionMatrix.TryGetValue(speciesName, out Dictionary<string, double> species_transitions)) {
+        public List<(string, double)> GetTransitionMatrixDistribution(string speciesName) {
+            if (!speciesTransitionMatrix.TryGetValue(speciesName, out List<(string, double)> speciesTransitions)) {
                 return null;
             }
-            Random rand = new Random();
-            double random = rand.NextDouble();
-            double cumulativeCheck = 0.0;
-            foreach (var transition in species_transitions) {
-                cumulativeCheck += transition.Value;
-                if (random <= cumulativeCheck) {
-                    if (transition.Key == speciesName) {
-                        return null;
-                    }
-                    if (outputProbability) {
-                        PlugIn.ModelCore.UI.WriteLine($"Transitioning {speciesName} to {transition.Key} based on a {transition.Value * 100}% probability");
-                    }
-                    return transition.Key;
-                }
-            }
-            return null;
+            return speciesTransitions;
         }
         
     }
