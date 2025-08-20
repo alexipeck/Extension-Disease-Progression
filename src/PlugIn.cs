@@ -78,6 +78,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             bool debugOutputTransitions = false;
             bool debugDumpSiteInformation = false;
             bool infectionStatusOutput = true;
+            byte infectionStatusOutputScaleFactor = 10;
             //bool disableDispersal = false;
             ////////
             
@@ -119,15 +120,46 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 Color healthyColor = Color.Green;
                 Color infectedColor = Color.Red;
                 Color ignoredColor = Color.Blue;
-                Bitmap bitmap = new Bitmap(landscapeX, landscapeY, PixelFormat.Format32bppArgb);
+                byte scaleFactor = infectionStatusOutputScaleFactor;
+                Bitmap bitmap = new Bitmap(landscapeX * scaleFactor, landscapeY * scaleFactor, PixelFormat.Format32bppArgb);
                 foreach ((int x, int y) in healthySites) {
-                    bitmap.SetPixel(x - 1, y - 1, healthyColor);
+                    int actualX = (x - 1) * scaleFactor;
+                    int actualY = (y - 1) * scaleFactor;
+                    for (int i = 0; i < scaleFactor; i++) {
+                        for (int j = 0; j < scaleFactor; j++) {
+                            int pixelX = actualX + i;
+                            int pixelY = actualY + j;
+                            if (pixelX >= 0 && pixelX < bitmap.Width && pixelY >= 0 && pixelY < bitmap.Height) {
+                                bitmap.SetPixel(pixelX, pixelY, healthyColor);
+                            }
+                        }
+                    }
                 }
                 foreach ((int x, int y) in infectedSites) {
-                    bitmap.SetPixel(x - 1, y - 1, infectedColor);
+                    int actualX = (x - 1) * scaleFactor;
+                    int actualY = (y - 1) * scaleFactor;
+                    for (int i = 0; i < scaleFactor; i++) {
+                        for (int j = 0; j < scaleFactor; j++) {
+                            int pixelX = actualX + i;
+                            int pixelY = actualY + j;
+                            if (pixelX >= 0 && pixelX < bitmap.Width && pixelY >= 0 && pixelY < bitmap.Height) {
+                                bitmap.SetPixel(pixelX, pixelY, infectedColor);
+                            }
+                        }
+                    }
                 }
                 foreach ((int x, int y) in ignoredSites) {
-                    bitmap.SetPixel(x - 1, y - 1, ignoredColor);
+                    int actualX = (x - 1) * scaleFactor;
+                    int actualY = (y - 1) * scaleFactor;
+                    for (int i = 0; i < scaleFactor; i++) {
+                        for (int j = 0; j < scaleFactor; j++) {
+                            int pixelX = actualX + i;
+                            int pixelY = actualY + j;
+                            if (pixelX >= 0 && pixelX < bitmap.Width && pixelY >= 0 && pixelY < bitmap.Height) {
+                                bitmap.SetPixel(pixelX, pixelY, ignoredColor);
+                            }
+                        }
+                    }
                 }
                 bitmap.Save(outputPath, ImageFormat.Png);
             }
