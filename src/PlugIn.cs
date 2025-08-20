@@ -6,6 +6,8 @@ using System.Dynamic;
 using Landis.Library.UniversalCohorts;
 using System.Diagnostics;
 using System;
+using System.Drawing;
+using System.Drawing.Imaging;
 
 namespace Landis.Extension.Disturbance.DiseaseProgression
 {
@@ -51,6 +53,17 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
             ModelCore.UI.WriteLine("");
             Timestep = parameters.Timestep;
+            
+            //empty the infection timeline folder
+            string infectionTimelinePath = "./infection_timeline";
+            if (System.IO.Directory.Exists(infectionTimelinePath)) {
+                System.IO.DirectoryInfo directory = new System.IO.DirectoryInfo(infectionTimelinePath);
+                foreach (System.IO.FileInfo file in directory.GetFiles()) {
+                    file.Delete();
+                }
+                ModelCore.UI.WriteLine($"Emptied infection timeline folder: {infectionTimelinePath}");
+            }
+            
             ModelCore.UI.WriteLine("Disease progression initialized");
         }
 
@@ -62,8 +75,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             //DEBUG PARAMETERS
             //bool debugDisableDiseaseProgressionKill = false;
             //bool debugOnlyOneTransferPerSitePerTimestep = false;
-            bool debugOutputTransitions = true;
-            bool debugDumpSiteInformation = true;
+            bool debugOutputTransitions = false;
+            bool debugDumpSiteInformation = false;
+            bool infectionStatusOutput = true;
             //bool disableDispersal = false;
             ////////
             
@@ -74,10 +88,10 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             // specified within the matrix or sites which contain one of the infected variants
             HashSet<(int x, int y)> healthySites = new HashSet<(int x, int y)>();
             HashSet<(int x, int y)> infectedSites = new HashSet<(int x, int y)>();
+            HashSet<(int x, int y)> ignoredSites = new HashSet<(int x, int y)>();
 
             // infection detection & adjustment pass
             foreach (ActiveSite site in sites) {
-
                 bool containsHealthySpecies = false;
                 bool containsInfectedSpecies = false;
                 foreach (ISpeciesCohorts speciesCohorts in SiteVars.Cohorts[site]) {
@@ -87,12 +101,35 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                         containsInfectedSpecies = true;
                     }
                 }
-                var siteLocation = site.Location;
+                Location siteLocation = site.Location;
                 if (containsHealthySpecies && !containsInfectedSpecies) {
                     healthySites.Add((siteLocation.Row, siteLocation.Column));
                 } else if (containsInfectedSpecies) {
                     infectedSites.Add((siteLocation.Row, siteLocation.Column));
+                } else if (infectionStatusOutput) {
+                    ignoredSites.Add((siteLocation.Row, siteLocation.Column));
                 }
+            }
+
+            if (infectionStatusOutput) {
+                string outputPath = $"./infection_timeline/infection_state_{modelCore.CurrentTime}.png";
+                System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(outputPath));
+                var landscapeDimensions = PlugIn.ModelCore.Landscape.Dimensions;
+                (int landscapeX, int landscapeY) = (landscapeDimensions.Rows, landscapeDimensions.Columns);
+                Color healthyColor = Color.Green;
+                Color infectedColor = Color.Red;
+                Color ignoredColor = Color.Blue;
+                Bitmap bitmap = new Bitmap(landscapeX, landscapeY, PixelFormat.Format32bppArgb);
+                foreach ((int x, int y) in healthySites) {
+                    bitmap.SetPixel(x - 1, y - 1, healthyColor);
+                }
+                foreach ((int x, int y) in infectedSites) {
+                    bitmap.SetPixel(x - 1, y - 1, infectedColor);
+                }
+                foreach ((int x, int y) in ignoredSites) {
+                    bitmap.SetPixel(x - 1, y - 1, ignoredColor);
+                }
+                bitmap.Save(outputPath, ImageFormat.Png);
             }
 
             // compute relative site positions
