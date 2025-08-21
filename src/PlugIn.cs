@@ -73,13 +73,10 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             ModelCore.UI.WriteLine("Running disease progression");
             ////////
             //DEBUG PARAMETERS
-            //bool debugDisableDiseaseProgressionKill = false;
-            //bool debugOnlyOneTransferPerSitePerTimestep = false;
-            bool debugOutputTransitions = false;
-            bool debugDumpSiteInformation = false;
-            bool infectionStatusOutput = true;
-            byte infectionStatusOutputScaleFactor = 10;
-            //bool disableDispersal = false;
+            bool debugOutputTransitions = true;
+            bool debugDumpSiteInformation = true;
+            bool debugInfectionStatusOutput = true;
+            byte debugInfectionStatusOutputScaleFactor = 10;
             ////////
             
             IEnumerable<ActiveSite> sites = ModelCore.Landscape.ActiveSites;
@@ -107,12 +104,12 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     healthySites.Add((siteLocation.Row, siteLocation.Column));
                 } else if (containsInfectedSpecies) {
                     infectedSites.Add((siteLocation.Row, siteLocation.Column));
-                } else if (infectionStatusOutput) {
+                } else if (debugInfectionStatusOutput) {
                     ignoredSites.Add((siteLocation.Row, siteLocation.Column));
                 }
             }
 
-            if (infectionStatusOutput) {
+            if (debugInfectionStatusOutput) {
                 string outputPath = $"./infection_timeline/infection_state_{modelCore.CurrentTime}.png";
                 System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(outputPath));
                 var landscapeDimensions = PlugIn.ModelCore.Landscape.Dimensions;
@@ -120,7 +117,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 Color healthyColor = Color.Green;
                 Color infectedColor = Color.Red;
                 Color ignoredColor = Color.Blue;
-                byte scaleFactor = infectionStatusOutputScaleFactor;
+                byte scaleFactor = debugInfectionStatusOutputScaleFactor;
                 Bitmap bitmap = new Bitmap(landscapeX * scaleFactor, landscapeY * scaleFactor, PixelFormat.Format32bppArgb);
                 foreach ((int x, int y) in healthySites) {
                     int actualX = (x - 1) * scaleFactor;
@@ -178,8 +175,11 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 foreach ((int x, int y) infectedSite in infectedSites) {
                     //TODO: Ensure that the index offset is the healthy site relative
                     //      to the infected siteas the infected site is the source.
+                    //Console.WriteLine($"infectedSite.x: {infectedSite.x}, infectedSite.y: {infectedSite.y}, healthySite.x: {healthySite.x}, healthySite.y: {healthySite.y}");
                     (int x, int y) relativeGridOffset = SiteVars.CalculateRelativeGridOffset(infectedSite.x, infectedSite.y, healthySite.x, healthySite.y);
+                    //Console.WriteLine($"relativeGridOffset.x: {relativeGridOffset.x}, relativeGridOffset.y: {relativeGridOffset.y}");
                     double dispersalProbability = SiteVars.GetDispersalProbability(relativeGridOffset.x, relativeGridOffset.y);
+                    //Console.WriteLine($"dispersalProbability: {dispersalProbability}");
                     Debug.Assert(dispersalProbability >= 0.0 && dispersalProbability <= 1.0);
                     cumulativeDispersalProbability += dispersalProbability;
                 }
@@ -250,6 +250,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                         //pools as a result of Math.Floor being used in truncation of positive float values
                         //to int it simply gets discarded
                         int totalBiomassAccountedFor = 0;
+                        int remainingBiomass = concreteCohort.Data.Biomass;
                         
                         foreach ((string species, double proportion) in transitionDistribution) {
                             //null case is the no change case within the matrix accounting for either
@@ -257,7 +258,14 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                             //adding up to 1.0, in all other cases, the null case equals the user specified
                             //proportion + the remaining proportion
                             if (species != null) {
-                                int transfer = (int)(concreteCohort.Data.Biomass * proportion);
+                                if (remainingBiomass == 0) {
+                                    break;
+                                }
+                                int transfer = (int)Math.Round(concreteCohort.Data.Biomass * proportion);
+                                if (remainingBiomass - transfer < 0) {
+                                    transfer = remainingBiomass;
+                                }
+                                remainingBiomass -= transfer;
                                 totalBiomassAccountedFor += transfer;
                                 if (species.ToUpper() == "DEAD") {
                                     //there is a disconnect in the calculated biomass sent to the decomposition pools
