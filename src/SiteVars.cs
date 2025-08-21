@@ -4,6 +4,10 @@ using Landis.Library.UniversalCohorts;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Drawing;
+using System.Drawing.Imaging;
+using System.IO;
+using System.Linq;
 
 namespace Landis.Extension.Disturbance.DiseaseProgression
 {    public static class SiteVars
@@ -52,7 +56,84 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     dispersalLookupMatrix[(i, j)] = probability;
                 }
             }
+            
+            Console.WriteLine($"Generated dispersal matrix with {dispersalLookupMatrix.Count} entries");
+            if (dispersalLookupMatrix.Count > 0)
+            {
+                var nonZeroEntries = dispersalLookupMatrix.Where(kvp => kvp.Value > 0.0).Take(5).ToList();
+                Console.WriteLine($"Found {nonZeroEntries.Count} non-zero entries");
+                foreach (var entry in nonZeroEntries)
+                {
+                    Console.WriteLine($"Entry at {entry.Key}: {entry.Value:E6}");
+                }
+            }
+            
+            GenerateProbabilityMatrixImage(dispersalLookupMatrix, landscapeX, landscapeY);
+            
             return dispersalLookupMatrix;
+        }
+
+        private static void GenerateProbabilityMatrixImage(Dictionary<(int x, int y), double> dispersalLookupMatrix, int landscapeX, int landscapeY) {
+            int cellSize = 120;
+            int matrixWidth = landscapeX + 1;
+            int matrixHeight = landscapeY + 1;
+            int imageWidth = matrixWidth * cellSize;
+            int imageHeight = matrixHeight * cellSize;
+            
+            int centerX = (landscapeX / 2) + 1;
+            int centerY = (landscapeY / 2) + 1;
+            
+            using (Bitmap bitmap = new Bitmap(imageWidth, imageHeight))
+            using (Graphics graphics = Graphics.FromImage(bitmap))
+            {
+                graphics.Clear(Color.Black);
+                
+                using (Font font = new Font("Arial", 12))
+                using (SolidBrush textBrush = new SolidBrush(Color.White))
+                {
+                    for (int gridY = 0; gridY < matrixHeight; gridY++)
+                    {
+                        for (int gridX = 0; gridX < matrixWidth; gridX++)
+                        {
+                            int offsetX = gridX - centerX;
+                            int offsetY = gridY - centerY;
+                            
+                            if (dispersalLookupMatrix.TryGetValue((offsetX, offsetY), out double probability))
+                            {
+                                int pixelX = gridX * cellSize;
+                                int pixelY = gridY * cellSize;
+                                
+                                string probabilityText;
+                                if (probability == 0.0)
+                                {
+                                    probabilityText = "0";
+                                }
+                                else if (probability < 0.00000001)
+                                {
+                                    probabilityText = "~0";
+                                }
+                                else
+                                {
+                                    probabilityText = probability.ToString("G8");
+                                    if (probabilityText.StartsWith("0."))
+                                    {
+                                        probabilityText = probabilityText.Substring(1);
+                                    }
+                                }
+                                
+                                SizeF textSize = graphics.MeasureString(probabilityText, font);
+                                float textX = pixelX + (cellSize - textSize.Width) / 2;
+                                float textY = pixelY + (cellSize - textSize.Height) / 2;
+                                
+                                graphics.DrawString(probabilityText, font, textBrush, textX, textY);
+                            }
+                        }
+                    }
+                }
+                
+                string filename = $"dispersal_probability_matrix_{landscapeX}x{landscapeY}.png";
+                bitmap.Save(filename, ImageFormat.Png);
+            }
         }
 
         private static double CalculateDispersalProbability(DispersalProbabilityAlgorithm dispersalType, double distance, double alphaCoefficient, float cellLength, float cellArea) {
