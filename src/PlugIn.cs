@@ -175,11 +175,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 foreach ((int x, int y) infectedSite in infectedSites) {
                     //TODO: Ensure that the index offset is the healthy site relative
                     //      to the infected siteas the infected site is the source.
-                    //Console.WriteLine($"infectedSite.x: {infectedSite.x}, infectedSite.y: {infectedSite.y}, healthySite.x: {healthySite.x}, healthySite.y: {healthySite.y}");
                     (int x, int y) relativeGridOffset = SiteVars.CalculateRelativeGridOffset(infectedSite.x, infectedSite.y, healthySite.x, healthySite.y);
-                    //Console.WriteLine($"relativeGridOffset.x: {relativeGridOffset.x}, relativeGridOffset.y: {relativeGridOffset.y}");
                     double dispersalProbability = SiteVars.GetDispersalProbability(relativeGridOffset.x, relativeGridOffset.y);
-                    //Console.WriteLine($"dispersalProbability: {dispersalProbability}");
                     Debug.Assert(dispersalProbability >= 0.0 && dispersalProbability <= 1.0);
                     cumulativeDispersalProbability += dispersalProbability;
                 }
@@ -261,18 +258,22 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                                 if (remainingBiomass == 0) {
                                     break;
                                 }
+                                //Console.WriteLine($"Before rounding: {concreteCohort.Data.Biomass * proportion}");
                                 int transfer = (int)Math.Round(concreteCohort.Data.Biomass * proportion);
+                                //Console.WriteLine($"Rounded: {Math.Round(concreteCohort.Data.Biomass * proportion)}");
+                                //Console.WriteLine($"Cast: {transfer}");
                                 if (remainingBiomass - transfer < 0) {
                                     transfer = remainingBiomass;
                                 }
                                 remainingBiomass -= transfer;
                                 totalBiomassAccountedFor += transfer;
-                                if (species.ToUpper() == "DEAD") {
-                                    //there is a disconnect in the calculated biomass sent to the decomposition pools
-                                    //because their math is based around division not multiplication, this increases the
-                                    //error accumulation which is hard to account for because they don't end in a final biomass
-                                    //value to be removed, the proportion of the biomass is used to calculate the amount of wood and foliar biomass
-                                    //the error accumulation here will be the same as is mentioned for totalBiomassAccountedFor above.
+                                if (species.ToUpper() == "DEAD" || concreteCohort.Data.Biomass == 1) {
+                                    //This is a hacky way to kill miniscule cohorts
+                                    if (concreteCohort.Data.Biomass == 1) {
+                                        transfer = 1;
+                                        remainingBiomass -= transfer;
+                                        totalBiomassAccountedFor += transfer;
+                                    }
                                     Cohort.CohortMortality(concreteSpeciesCohorts, concreteCohort, site, type, (float)proportion);
                                     if (debugOutputTransitions) {
                                         ModelCore.UI.WriteLine($"Transitioned to dead: Age: {concreteCohort.Data.Age}, Biomass: {concreteCohort.Data.Biomass}, Species: {speciesCohorts.Species.Name}");
