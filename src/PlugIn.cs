@@ -86,6 +86,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             // specified within the matrix or sites which contain one of the infected variants
             HashSet<(int x, int y)> healthySites = new HashSet<(int x, int y)>();
             HashSet<(int x, int y)> infectedSites = new HashSet<(int x, int y)>();
+            HashSet<(int x, int y)> newlyInfectedSites = new HashSet<(int x, int y)>();
             HashSet<(int x, int y)> ignoredSites = new HashSet<(int x, int y)>();
 
             // infection detection & adjustment pass
@@ -170,13 +171,16 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             // to do a nested loop for healthy->infected  and store the relative positions
             // then hold an accumilated probability for every healthy site, performing one RNG per healthy
             // site to determine whether it becomes infected.
+            int worstCaseMaximumUniformDispersalDistance = SiteVars.GetWorstCaseMaximumUniformDispersalDistance();
             foreach ((int x, int y) healthySite in healthySites) {
                 double cumulativeDispersalProbability = 0.0;
                 foreach ((int x, int y) infectedSite in infectedSites) {
-                    //TODO: Ensure that the index offset is the healthy site relative
-                    //      to the infected siteas the infected site is the source.
                     (int x, int y) relativeGridOffset = SiteVars.CalculateRelativeGridOffset(infectedSite.x, infectedSite.y, healthySite.x, healthySite.y);
-                    double dispersalProbability = SiteVars.GetDispersalProbability(relativeGridOffset.x, relativeGridOffset.y);
+                    (int x, int y) canonicalizedRelativeGridOffset = SiteVars.CanonicalizeToHalfQuadrant(relativeGridOffset.x, relativeGridOffset.y);
+                    if (canonicalizedRelativeGridOffset.x >= worstCaseMaximumUniformDispersalDistance || canonicalizedRelativeGridOffset.y >= worstCaseMaximumUniformDispersalDistance) {
+                        continue;
+                    }
+                    double dispersalProbability = SiteVars.GetDispersalProbability(canonicalizedRelativeGridOffset.x, canonicalizedRelativeGridOffset.y);
                     Debug.Assert(dispersalProbability >= 0.0 && dispersalProbability <= 1.0);
                     cumulativeDispersalProbability += dispersalProbability;
                 }
@@ -189,10 +193,12 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 Random rand = new Random();
                 double random = rand.NextDouble();
                 if (random <= cumulativeDispersalProbability) {
-                    infectedSites.Add(healthySite);
+                    newlyInfectedSites.Add(healthySite);
                 }
             }
             healthySites.Clear();
+            infectedSites.UnionWith(newlyInfectedSites);
+            newlyInfectedSites.Clear();
             ///////////////////
             
             // Species string to ISpecies lookup

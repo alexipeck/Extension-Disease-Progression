@@ -16,7 +16,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
     {
         private static ISiteVar<SiteCohorts> universalCohorts;
         private static Dictionary<(int x, int y), double> indexOffsetDispersalProbabilityDictionary;
-
+        private static int worstCaseMaximumUniformDispersalDistance;
+        
         public static void Initialize(ICore modelCore, IInputParameters parameters) {
             universalCohorts = PlugIn.ModelCore.GetSiteVar<SiteCohorts>("Succession.UniversalCohorts");
             var landscapeDimensions = PlugIn.ModelCore.Landscape.Dimensions;
@@ -24,6 +25,10 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             PlugIn.ModelCore.UI.WriteLine($"Generating dispersal lookup matrix for {landscapeX}x{landscapeY} landscape");
             indexOffsetDispersalProbabilityDictionary = GenerateDispersalLookupMatrix(parameters.DispersalProbabilityAlgorithm, parameters.AlphaCoefficient, PlugIn.ModelCore.CellLength, landscapeX, landscapeY, parameters.DispersalMaxDistance);
             PlugIn.ModelCore.UI.WriteLine($"Finished generating dispersal lookup matrix for {landscapeX}x{landscapeY} landscape");
+        }
+
+        public static int GetWorstCaseMaximumUniformDispersalDistance() {
+            return worstCaseMaximumUniformDispersalDistance;
         }
 
         public static (int x, int y) CalculateRelativeGridOffset(int x1, int y1, int x2, int y2) {
@@ -34,16 +39,15 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             return Math.Sqrt(Math.Pow(x2 - x1, 2) + Math.Pow(y2 - y1, 2));
         }
 
-        public static double GetDispersalProbability(int x, int y) {
-            (int x, int y) canonicalized = CanonicalizeToHalfQuadrant(x, y);
-            if (indexOffsetDispersalProbabilityDictionary.TryGetValue((canonicalized.x, canonicalized.y), out double probability)) {
+        public static double GetDispersalProbability(int canonicalized_x, int canonicalized_y) {
+            if (indexOffsetDispersalProbabilityDictionary.TryGetValue((canonicalized_x, canonicalized_y), out double probability)) {
                 return probability;
             }
             return 0.0;
         }
 
         //Reduces memory usage of the dictionary by 87.5%
-        private static (int x, int y) CanonicalizeToHalfQuadrant(int x, int y) {
+        public static (int x, int y) CanonicalizeToHalfQuadrant(int x, int y) {
             int sx = x < 0 ? 1 : 0;
             int sy = y < 0 ? 1 : 0;
             int k = ((sy - sx) + 2 * (sx & sy)) & 3;
@@ -60,6 +64,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
 
         private static Dictionary<(int x, int y), double> GenerateDispersalLookupMatrix(DispersalProbabilityAlgorithm dispersalType, double alphaCoefficient, float cellLength, int landscapeX, int landscapeY, int dispersalMaxDistance) {
             Debug.Assert(cellLength > 0);
+            worstCaseMaximumUniformDispersalDistance = (int)Math.Ceiling(dispersalMaxDistance / cellLength);
             float cellArea = cellLength * cellLength;
 
             ConcurrentDictionary<(int x, int y), double> dispersalLookupMatrix = new ConcurrentDictionary<(int x, int y), double>();
