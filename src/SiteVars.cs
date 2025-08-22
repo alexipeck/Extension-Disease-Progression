@@ -8,6 +8,8 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
+using System.Collections.Concurrent;
+using System.Threading.Tasks;
 
 namespace Landis.Extension.Disturbance.DiseaseProgression
 {    public static class SiteVars
@@ -60,27 +62,28 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             Debug.Assert(cellLength > 0);
             float cellArea = cellLength * cellLength;
 
-            Dictionary<(int x, int y), double> dispersalLookupMatrix = new Dictionary<(int x, int y), double>();
+            ConcurrentDictionary<(int x, int y), double> dispersalLookupMatrix = new ConcurrentDictionary<(int x, int y), double>();
             int maxRadius = Math.Max(landscapeX, landscapeY);
-            for (int x = 0; x <= maxRadius; x++)
-            {
-                for (int y = 0; y <= x; y++)
-                {
+            
+            Parallel.For(0, maxRadius + 1, x => {
+                for (int y = 0; y <= x; y++) {
                     double distance = CalculateEuclideanDistance(x, y, 0, 0) * cellLength;
                     if (distance > dispersalMaxDistance) continue;
                     double probability = CalculateDispersalProbability(dispersalType, distance, alphaCoefficient, cellLength, cellArea);
                     dispersalLookupMatrix[(x, y)] = probability;
                 }
-            }
+            });
             
             Console.WriteLine($"Generated dispersal matrix with {dispersalLookupMatrix.Count} entries");
             
-            GenerateProbabilityMatrixImage(dispersalLookupMatrix, landscapeX, landscapeY);
+            //GenerateProbabilityMatrixImage(dispersalLookupMatrix, landscapeX, landscapeY);
             
-            return dispersalLookupMatrix;
+            return new Dictionary<(int x, int y), double>(dispersalLookupMatrix);
         }
 
         private static void GenerateProbabilityMatrixImage(Dictionary<(int x, int y), double> dispersalLookupMatrix, int landscapeX, int landscapeY) {
+            //TODO: Fix large number of cells blowing out the image size to well above the 32768x32768 limit of a bitmap
+            //      500x500 brings it to over 60000x60000
             int cellSize = 120;
             int matrixWidth = landscapeX + 1;
             int matrixHeight = landscapeY + 1;
