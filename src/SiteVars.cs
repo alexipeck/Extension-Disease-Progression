@@ -19,7 +19,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             universalCohorts = PlugIn.ModelCore.GetSiteVar<SiteCohorts>("Succession.UniversalCohorts");
             var landscapeDimensions = PlugIn.ModelCore.Landscape.Dimensions;
             (int landscapeX, int landscapeY) = (landscapeDimensions.Rows, landscapeDimensions.Columns);
-            indexOffsetDispersalProbabilityDictionary = GenerateDispersalLookupMatrix(parameters.DispersalProbabilityAlgorithm, parameters.AlphaCoefficient, PlugIn.ModelCore.CellLength, landscapeX, landscapeY);
+            PlugIn.ModelCore.UI.WriteLine($"Generating dispersal lookup matrix for {landscapeX}x{landscapeY} landscape");
+            indexOffsetDispersalProbabilityDictionary = GenerateDispersalLookupMatrix(parameters.DispersalProbabilityAlgorithm, parameters.AlphaCoefficient, PlugIn.ModelCore.CellLength, landscapeX, landscapeY, parameters.DispersalMaxDistance);
+            PlugIn.ModelCore.UI.WriteLine($"Finished generating dispersal lookup matrix for {landscapeX}x{landscapeY} landscape");
         }
 
         public static (int x, int y) CalculateRelativeGridOffset(int x1, int y1, int x2, int y2) {
@@ -31,42 +33,47 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         }
 
         public static double GetDispersalProbability(int x, int y) {
-            // direct indexing without error case should be safe as a probability
-            // should have be engenerated for every valid index
-            return indexOffsetDispersalProbabilityDictionary[(x, y)];
+            (int x, int y) canonicalized = CanonicalizeToHalfQuadrant(x, y);
+            if (indexOffsetDispersalProbabilityDictionary.TryGetValue((canonicalized.x, canonicalized.y), out double probability)) {
+                return probability;
+            }
+            return 0.0;
         }
 
-        private static Dictionary<(int x, int y), double> GenerateDispersalLookupMatrix(DispersalProbabilityAlgorithm dispersalType, double alphaCoefficient, float cellLength, int landscapeX, int landscapeY) {
+        //Reduces memory usage of the dictionary by 87.5%
+        private static (int x, int y) CanonicalizeToHalfQuadrant(int x, int y) {
+            int sx = x < 0 ? 1 : 0;
+            int sy = y < 0 ? 1 : 0;
+            int k = ((sy - sx) + 2 * (sx & sy)) & 3;
+            (int x, int y) q1;
+            switch (k) {
+                case 0: q1 = (x, y); break;
+                case 1: q1 = (-y, x); break;
+                case 2: q1 = (-x, -y); break;
+                default: q1 = (y, -x); break;
+            }
+            if (q1.y > q1.x) return (q1.y, q1.x);
+            return q1;
+        }
+
+        private static Dictionary<(int x, int y), double> GenerateDispersalLookupMatrix(DispersalProbabilityAlgorithm dispersalType, double alphaCoefficient, float cellLength, int landscapeX, int landscapeY, int dispersalMaxDistance) {
             Debug.Assert(cellLength > 0);
             float cellArea = cellLength * cellLength;
-            double pythagorasConstant = Math.Sqrt(2);
-            //TODO: Check if the alphaCoefficient is supposed to be normalized to 0.0 and 1.0
-            int maxRadius = (int)Math.Ceiling(Math.Max(landscapeX, landscapeY) * pythagorasConstant);
+
             Dictionary<(int x, int y), double> dispersalLookupMatrix = new Dictionary<(int x, int y), double>();
-            for (int i = -maxRadius; i <= maxRadius; i++)
+            int maxRadius = Math.Max(landscapeX, landscapeY);
+            for (int x = 0; x <= maxRadius; x++)
             {
-                for (int j = -maxRadius; j <= maxRadius; j++)
+                for (int y = 0; y <= x; y++)
                 {
-                    double distance = CalculateEuclideanDistance(i, j, 0, 0) * cellLength;
-                    if (distance == 0.0) {
-                        dispersalLookupMatrix[(i, j)] = 0.0;
-                        continue;
-                    }
+                    double distance = CalculateEuclideanDistance(x, y, 0, 0) * cellLength;
+                    if (distance > dispersalMaxDistance) continue;
                     double probability = CalculateDispersalProbability(dispersalType, distance, alphaCoefficient, cellLength, cellArea);
-                    dispersalLookupMatrix[(i, j)] = probability;
+                    dispersalLookupMatrix[(x, y)] = probability;
                 }
             }
             
             Console.WriteLine($"Generated dispersal matrix with {dispersalLookupMatrix.Count} entries");
-            if (dispersalLookupMatrix.Count > 0)
-            {
-                var nonZeroEntries = dispersalLookupMatrix.Where(kvp => kvp.Value > 0.0).Take(5).ToList();
-                Console.WriteLine($"Found {nonZeroEntries.Count} non-zero entries");
-                foreach (var entry in nonZeroEntries)
-                {
-                    Console.WriteLine($"Entry at {entry.Key}: {entry.Value:E6}");
-                }
-            }
             
             GenerateProbabilityMatrixImage(dispersalLookupMatrix, landscapeX, landscapeY);
             
