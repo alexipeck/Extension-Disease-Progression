@@ -88,16 +88,29 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         }
 
         private static void GenerateProbabilityMatrixImage(Dictionary<(int x, int y), double> dispersalLookupMatrix, int landscapeX, int landscapeY) {
-            //TODO: Fix large number of cells blowing out the image size to well above the 32768x32768 limit of a bitmap
-            //      500x500 brings it to over 60000x60000
+            const int MAX_IMAGE_SIZE = 16384;
+            
             int cellSize = 120;
-            int matrixWidth = landscapeX + 1;
-            int matrixHeight = landscapeY + 1;
+            while (cellSize * (worstCaseMaximumUniformDispersalDistance + 1) > MAX_IMAGE_SIZE) {
+                cellSize--;
+            }
+            
+            int matrixWidth = Math.Min(worstCaseMaximumUniformDispersalDistance + 1, MAX_IMAGE_SIZE / cellSize);
+            int matrixHeight = Math.Min(worstCaseMaximumUniformDispersalDistance + 1, MAX_IMAGE_SIZE / cellSize);
+            
+            GenerateMatrixImage(dispersalLookupMatrix, matrixWidth, matrixHeight, cellSize);
+        }
+        
+        private static void GenerateMatrixImage(Dictionary<(int x, int y), double> dispersalLookupMatrix, int matrixWidth, int matrixHeight, int cellSize) {
             int imageWidth = matrixWidth * cellSize;
             int imageHeight = matrixHeight * cellSize;
             
-            int centerX = (landscapeX / 2) + 1;
-            int centerY = (landscapeY / 2) + 1;
+            if (imageWidth <= 0 || imageHeight <= 0 || imageWidth > 16384 || imageHeight > 16384) {
+                Console.WriteLine($"Skipping image generation - invalid dimensions: {imageWidth}x{imageHeight}");
+                return;
+            }
+            
+            Console.WriteLine($"Image dimensions: {imageWidth}x{imageHeight}");
             
             using (Bitmap bitmap = new Bitmap(imageWidth, imageHeight))
             using (Graphics graphics = Graphics.FromImage(bitmap))
@@ -107,34 +120,19 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 using (Font font = new Font("Arial", 12))
                 using (SolidBrush textBrush = new SolidBrush(Color.White))
                 {
-                    for (int gridY = 0; gridY < matrixHeight; gridY++)
-                    {
-                        for (int gridX = 0; gridX < matrixWidth; gridX++)
-                        {
-                            int offsetX = gridX - centerX;
-                            int offsetY = gridY - centerY;
-                            
-                            if (dispersalLookupMatrix.TryGetValue((offsetX, offsetY), out double probability))
-                            {
+                    for (int gridY = 0; gridY < matrixHeight; gridY++) {
+                        for (int gridX = 0; gridX < matrixWidth; gridX++) {
+                            if (dispersalLookupMatrix.TryGetValue((gridX, gridY), out double probability)) {
                                 int pixelX = gridX * cellSize;
                                 int pixelY = gridY * cellSize;
                                 
                                 string probabilityText;
-                                if (probability == 0.0)
-                                {
+                                if (probability == 0.0) {
                                     probabilityText = "0";
-                                }
-                                else if (probability < 0.00000001)
-                                {
+                                } else if (probability < 0.00000001) {
                                     probabilityText = "~0";
-                                }
-                                else
-                                {
-                                    probabilityText = probability.ToString("G8");
-                                    if (probabilityText.StartsWith("0."))
-                                    {
-                                        probabilityText = probabilityText.Substring(1);
-                                    }
+                                } else {
+                                    probabilityText = probability.ToString("E2");
                                 }
                                 
                                 SizeF textSize = graphics.MeasureString(probabilityText, font);
@@ -147,7 +145,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     }
                 }
                 
-                string filename = $"dispersal_probability_matrix_{landscapeX}x{landscapeY}.png";
+                string filename = $"dispersal_probability_matrix_radius_{worstCaseMaximumUniformDispersalDistance}.png";
                 bitmap.Save(filename, ImageFormat.Png);
             }
         }
