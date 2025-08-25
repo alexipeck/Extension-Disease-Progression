@@ -23,6 +23,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             var landscapeDimensions = PlugIn.ModelCore.Landscape.Dimensions;
             (int landscapeX, int landscapeY) = (landscapeDimensions.Rows, landscapeDimensions.Columns);
             PlugIn.ModelCore.UI.WriteLine($"Generating dispersal lookup matrix for {landscapeX}x{landscapeY} landscape");
+            worstCaseMaximumUniformDispersalDistance = (int)Math.Ceiling(parameters.DispersalMaxDistance / PlugIn.ModelCore.CellLength);
             indexOffsetDispersalProbabilityDictionary = GenerateDispersalLookupMatrix(parameters.DispersalProbabilityAlgorithm, parameters.AlphaCoefficient, PlugIn.ModelCore.CellLength, landscapeX, landscapeY, parameters.DispersalMaxDistance);
             PlugIn.ModelCore.UI.WriteLine($"Finished generating dispersal lookup matrix for {landscapeX}x{landscapeY} landscape");
         }
@@ -67,21 +68,21 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             worstCaseMaximumUniformDispersalDistance = (int)Math.Ceiling(dispersalMaxDistance / cellLength);
             float cellArea = cellLength * cellLength;
 
-            ConcurrentDictionary<(int x, int y), double> dispersalLookupMatrix = new ConcurrentDictionary<(int x, int y), double>();
+            Dictionary<(int x, int y), double> dispersalLookupMatrix = new Dictionary<(int x, int y), double>();
             int maxRadius = Math.Max(landscapeX, landscapeY);
             
-            Parallel.For(0, maxRadius + 1, x => {
+            for (int x = 0; x <= maxRadius; x++) {
                 for (int y = 0; y <= x; y++) {
                     double distance = CalculateEuclideanDistance(x, y, 0, 0) * cellLength;
                     if (distance > dispersalMaxDistance) continue;
                     double probability = CalculateDispersalProbability(dispersalType, distance, alphaCoefficient, cellLength, cellArea);
                     dispersalLookupMatrix[(x, y)] = probability;
                 }
-            });
+            };
             
             Console.WriteLine($"Generated dispersal matrix with {dispersalLookupMatrix.Count} entries");
             
-            //GenerateProbabilityMatrixImage(dispersalLookupMatrix, landscapeX, landscapeY);
+            GenerateProbabilityMatrixImage(dispersalLookupMatrix, landscapeX, landscapeY);
             
             return new Dictionary<(int x, int y), double>(dispersalLookupMatrix);
         }
