@@ -82,6 +82,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             byte debugInfectionStatusOutputScaleFactor = 10;
             ////////
             
+            Dimensions landscapeDimensions = ModelCore.Landscape.Dimensions;
+            int worstCaseMaximumUniformDispersalDistance = SiteVars.GetWorstCaseMaximumUniformDispersalDistance();
+            
             Stopwatch stopwatch = new Stopwatch();
             if (debugPerformTiming) {
                 stopwatch.Start();
@@ -136,7 +139,6 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     try {
                         string outputPath = $"./infection_timeline/infection_state_{modelCore.CurrentTime}.png";
                         System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(outputPath));
-                        var landscapeDimensions = ModelCore.Landscape.Dimensions;
                         (int landscapeX, int landscapeY) = (landscapeDimensions.Rows, landscapeDimensions.Columns);
                         Color healthyColor = Color.Green;
                         Color infectedColor = Color.Red;
@@ -199,12 +201,6 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 });
             }
 
-            /* if (healthySites.Count > infectedSites.Count) {
-
-            } else {
-
-            } */
-
             // compute relative site positions
             // compute cumulative probability of infection
             // TODO: This method may not agree with the data we have for infection
@@ -218,76 +214,40 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             //new method
             Stopwatch stopwatch1 = new Stopwatch();
             stopwatch1.Start();
-            if (healthySites.Count < infectedSites.Count) {
-                foreach ((int x, int y) healthySite in healthySites) {
-                    double cumulativeDispersalProbability = 0.0;
-                    foreach ((int xOffset, int yOffset) in SiteVars.PrecalculatedDispersalDistanceOffsets) {
-                        (int infectedSiteX, int infectedSiteY) = (healthySite.x + xOffset, healthySite.y + yOffset);
-                        if (infectedSites.Contains((infectedSiteX, infectedSiteY))) {
-                            (int x, int y) relativeGridOffset = SiteVars.CalculateRelativeGridOffset(infectedSiteX, infectedSiteY, healthySite.x, healthySite.y);
-                            Debug.Assert(relativeGridOffset.x == healthySite.x - xOffset && relativeGridOffset.y == healthySite.y - yOffset);
-                            (int x, int y) canonicalizedRelativeGridOffset = SiteVars.CanonicalizeToHalfQuadrant(relativeGridOffset.x, relativeGridOffset.y);
-                            double dispersalProbability = SiteVars.GetDispersalProbability(canonicalizedRelativeGridOffset.x, canonicalizedRelativeGridOffset.y);
-                            Debug.Assert(dispersalProbability >= 0.0 && dispersalProbability <= 1.0);
-                            cumulativeDispersalProbability += dispersalProbability;
-                        }
-                    }
-                    if (cumulativeDispersalProbability > 1.0) {
-                        cumulativeDispersalProbability = 1.0;
-                    }
-                    if (cumulativeDispersalProbability == 0.0) {
-                        continue;
-                    }
-                    Random rand = new Random();
-                    double random = rand.NextDouble();
-                    if (random <= cumulativeDispersalProbability) {
-                        newlyInfectedSites.Add(healthySite);
+            double[,] healthySiteCumulativeDispersalProbabilities = new double[landscapeDimensions.Columns, landscapeDimensions.Rows];
+            foreach ((int x, int y) healthySite in healthySites) {
+                foreach ((int xOffset, int yOffset) in SiteVars.PrecalculatedDispersalDistanceOffsets) {
+                    (int infectedSiteX, int infectedSiteY) = (healthySite.x + xOffset, healthySite.y + yOffset);
+                    if (infectedSites.Contains((infectedSiteX, infectedSiteY))) {
+                        (int x, int y) relativeGridOffset = SiteVars.CalculateRelativeGridOffset(infectedSiteX, infectedSiteY, healthySite.x, healthySite.y);
+                        Debug.Assert(relativeGridOffset.x == healthySite.x - xOffset && relativeGridOffset.y == healthySite.y - yOffset);
+                        (int x, int y) canonicalizedRelativeGridOffset = SiteVars.CanonicalizeToHalfQuadrant(relativeGridOffset.x, relativeGridOffset.y);
+                        double dispersalProbability = SiteVars.GetDispersalProbability(canonicalizedRelativeGridOffset.x, canonicalizedRelativeGridOffset.y);
+                        Debug.Assert(dispersalProbability >= 0.0 && dispersalProbability <= 1.0);
+                        healthySiteCumulativeDispersalProbabilities[healthySite.x - 1, healthySite.y - 1] += dispersalProbability;
                     }
                 }
-            } else {
-                Dictionary<(int x, int y), double> healthySiteCumulativeDispersalProbabilities = new Dictionary<(int x, int y), double>();
-                foreach ((int x, int y) healthySite in healthySites) {
-                    healthySiteCumulativeDispersalProbabilities[(healthySite.x, healthySite.y)] = 0.0;
+            }
+            foreach ((int x, int y) healthySite in healthySites) {
+                double cumulativeDispersalProbability = healthySiteCumulativeDispersalProbabilities[healthySite.x - 1, healthySite.y - 1];
+                if (cumulativeDispersalProbability == 0.0) {
+                    continue;
                 }
-                foreach ((int x, int y) infectedSite in infectedSites) {
-                    //double cumulativeDispersalProbability = 0.0;
-                    foreach ((int xOffset, int yOffset) in SiteVars.PrecalculatedDispersalDistanceOffsets) {
-                        (int healthySiteX, int healthySiteY) = (infectedSite.x + xOffset, infectedSite.y + yOffset);
-                        if (healthySites.Contains((healthySiteX, healthySiteY))) {
-                            (int x, int y) relativeGridOffset = SiteVars.CalculateRelativeGridOffset(infectedSite.x, infectedSite.y, healthySiteX, healthySiteY);
-                            Debug.Assert(relativeGridOffset.x == healthySiteX - xOffset && relativeGridOffset.y == healthySiteY - yOffset);
-                            (int x, int y) canonicalizedRelativeGridOffset = SiteVars.CanonicalizeToHalfQuadrant(relativeGridOffset.x, relativeGridOffset.y);
-                            double dispersalProbability = SiteVars.GetDispersalProbability(canonicalizedRelativeGridOffset.x, canonicalizedRelativeGridOffset.y);
-                            Debug.Assert(dispersalProbability >= 0.0 && dispersalProbability <= 1.0);
-                            healthySiteCumulativeDispersalProbabilities[(healthySiteX, healthySiteY)] += dispersalProbability;
-                        }
-                    }
-                }
-                foreach ((int x, int y) healthySite in healthySites) {
-                    double cumulativeDispersalProbability = healthySiteCumulativeDispersalProbabilities[(healthySite.x, healthySite.y)];
-                    if (cumulativeDispersalProbability > 1.0) {
-                        cumulativeDispersalProbability = 1.0;
-                    }
-                    if (cumulativeDispersalProbability == 0.0) {
-                        continue;
-                    }
-                    Random rand = new Random();
-                    double random = rand.NextDouble();
-                    if (random <= cumulativeDispersalProbability) {
-                        newlyInfectedSites.Add(healthySite);
-                    }
+                Random rand = new Random();
+                double random = rand.NextDouble();
+                if (random <= cumulativeDispersalProbability) {
+                    newlyInfectedSites.Add(healthySite);
                 }
             }
             
             stopwatch1.Stop();
             ModelCore.UI.WriteLine($"New method: {(int)stopwatch1.ElapsedMilliseconds} ms");
             
+            //old method
             Stopwatch stopwatch2 = new Stopwatch();
             stopwatch2.Start();
+            healthySiteCumulativeDispersalProbabilities = new double[landscapeDimensions.Columns, landscapeDimensions.Rows];
             foreach ((int x, int y) healthySite in healthySites) {
-                double cumulativeDispersalProbability = 0.0;
-                //old method
-                int worstCaseMaximumUniformDispersalDistance = SiteVars.GetWorstCaseMaximumUniformDispersalDistance();
                 foreach ((int x, int y) infectedSite in infectedSites) {
                     (int x, int y) relativeGridOffset = SiteVars.CalculateRelativeGridOffset(infectedSite.x, infectedSite.y, healthySite.x, healthySite.y);
                     (int x, int y) canonicalizedRelativeGridOffset = SiteVars.CanonicalizeToHalfQuadrant(relativeGridOffset.x, relativeGridOffset.y);
@@ -296,18 +256,18 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     }
                     double dispersalProbability = SiteVars.GetDispersalProbability(canonicalizedRelativeGridOffset.x, canonicalizedRelativeGridOffset.y);
                     Debug.Assert(dispersalProbability >= 0.0 && dispersalProbability <= 1.0);
-                    cumulativeDispersalProbability += dispersalProbability;
+                    healthySiteCumulativeDispersalProbabilities[healthySite.x - 1, healthySite.y - 1] += dispersalProbability;
                 }
-                if (cumulativeDispersalProbability > 1.0) {
-                    cumulativeDispersalProbability = 1.0;
-                }
+            }
+            foreach ((int x, int y) healthySite in healthySites) {
+                double cumulativeDispersalProbability = healthySiteCumulativeDispersalProbabilities[healthySite.x - 1, healthySite.y - 1];
                 if (cumulativeDispersalProbability == 0.0) {
                     continue;
                 }
-                Random rand2 = new Random();
-                double random2 = rand2.NextDouble();
-                if (random2 <= cumulativeDispersalProbability) {
-                    debugNewlyInfectedSites.Add(healthySite);
+                Random rand = new Random();
+                double random = rand.NextDouble();
+                if (random <= cumulativeDispersalProbability) {
+                    newlyInfectedSites.Add(healthySite);
                 }
             }
             stopwatch2.Stop();
