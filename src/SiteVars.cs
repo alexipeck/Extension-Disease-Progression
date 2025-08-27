@@ -6,18 +6,20 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
-using System.IO;
 using System.Linq;
-using System.Collections.Concurrent;
-using System.Threading.Tasks;
 
 namespace Landis.Extension.Disturbance.DiseaseProgression
 {    public static class SiteVars
     {
         private static ISiteVar<SiteCohorts> universalCohorts;
         private static Dictionary<(int x, int y), double> indexOffsetDispersalProbabilityDictionary;
+        private static Dictionary<(int x, int y), int> resproutLifetimeDictionary;
         private static int worstCaseMaximumUniformDispersalDistance;
-        
+        //TODO: Add to input parameters
+        private static int resproutMaxLongevity;
+        //TODO: Add to input parameters
+        private static int resproutHalfLife;
+        private const int MAX_IMAGE_SIZE = 16384;
         public static void Initialize(ICore modelCore, IInputParameters parameters) {
             universalCohorts = PlugIn.ModelCore.GetSiteVar<SiteCohorts>("Succession.UniversalCohorts");
             var landscapeDimensions = PlugIn.ModelCore.Landscape.Dimensions;
@@ -25,11 +27,31 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             PlugIn.ModelCore.UI.WriteLine($"Generating dispersal lookup matrix for {landscapeX}x{landscapeY} landscape");
             worstCaseMaximumUniformDispersalDistance = (int)Math.Ceiling(parameters.DispersalMaxDistance / PlugIn.ModelCore.CellLength);
             indexOffsetDispersalProbabilityDictionary = GenerateDispersalLookupMatrix(parameters.DispersalProbabilityAlgorithm, parameters.AlphaCoefficient, PlugIn.ModelCore.CellLength, landscapeX, landscapeY, parameters.DispersalMaxDistance);
+            //TODO: Initializes empty for now, but realistically the spinup cycle should add some sites to this
+            resproutLifetimeDictionary = new Dictionary<(int x, int y), int>();
+            //TODO: Add to input parameters
+            resproutMaxLongevity = 5/* parameters.ResproutMaxLongevity */;
+            //TODO: Add to input parameters
+            resproutHalfLife = 2/* parameters.resproutHalfLife */;
             PlugIn.ModelCore.UI.WriteLine($"Finished generating dispersal lookup matrix for {landscapeX}x{landscapeY} landscape");
         }
 
         public static int GetWorstCaseMaximumUniformDispersalDistance() {
             return worstCaseMaximumUniformDispersalDistance;
+        }
+        public static void DecrementResproutLifetimes() {
+            foreach (var key in resproutLifetimeDictionary.Keys.ToList()) {
+                resproutLifetimeDictionary[key]--;
+                if (resproutLifetimeDictionary[key] < 0)
+                    resproutLifetimeDictionary.Remove(key);
+            }
+        }
+        public static void AddResproutLifetime(int x, int y) {
+            //TODO: This is a placeholder, determine a better way to implement lifetime
+            int lifetime = resproutMaxLongevity;
+            if (!resproutLifetimeDictionary.ContainsKey((x, y)))
+                resproutLifetimeDictionary[(x, y)] = 0;
+            resproutLifetimeDictionary[(x, y)] = Math.Min(resproutLifetimeDictionary[(x, y)] + lifetime, resproutMaxLongevity);
         }
 
         public static (int x, int y) CalculateRelativeGridOffset(int x1, int y1, int x2, int y2) {
@@ -82,14 +104,12 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             
             Console.WriteLine($"Generated dispersal matrix with {dispersalLookupMatrix.Count} entries");
             
-            GenerateProbabilityMatrixImage(dispersalLookupMatrix, landscapeX, landscapeY);
+            GenerateProbabilityMatrixImage(dispersalLookupMatrix);
             
             return new Dictionary<(int x, int y), double>(dispersalLookupMatrix);
         }
 
-        private static void GenerateProbabilityMatrixImage(Dictionary<(int x, int y), double> dispersalLookupMatrix, int landscapeX, int landscapeY) {
-            const int MAX_IMAGE_SIZE = 16384;
-            
+        private static void GenerateProbabilityMatrixImage(Dictionary<(int x, int y), double> dispersalLookupMatrix) {
             int cellSize = 120;
             while (cellSize * (worstCaseMaximumUniformDispersalDistance + 1) > MAX_IMAGE_SIZE) {
                 cellSize--;
@@ -103,9 +123,10 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         
         private static void GenerateMatrixImage(Dictionary<(int x, int y), double> dispersalLookupMatrix, int matrixWidth, int matrixHeight, int cellSize) {
             int imageWidth = matrixWidth * cellSize;
-            int imageHeight = matrixHeight * cellSize;
+            //0.7071067812 is 1/1.4142135624 being half of pythagoras' constant
+            int imageHeight = (int)(imageWidth * 0.7071067812) + 1;
             
-            if (imageWidth <= 0 || imageHeight <= 0 || imageWidth > 16384 || imageHeight > 16384) {
+            if (imageWidth <= 0 || imageHeight <= 0 || imageWidth > MAX_IMAGE_SIZE || imageHeight > MAX_IMAGE_SIZE) {
                 Console.WriteLine($"Skipping image generation - invalid dimensions: {imageWidth}x{imageHeight}");
                 return;
             }
@@ -145,7 +166,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     }
                 }
                 
-                string filename = $"dispersal_probability_matrix_radius_{worstCaseMaximumUniformDispersalDistance}.png";
+                string filename = $"canonicalized_dispersal_probability_matrix_radius_{worstCaseMaximumUniformDispersalDistance}.png";
                 bitmap.Save(filename, ImageFormat.Png);
             }
         }

@@ -8,6 +8,7 @@ using System.Diagnostics;
 using System;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Threading.Tasks;
 
 namespace Landis.Extension.Disturbance.DiseaseProgression
 {
@@ -73,11 +74,18 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             ModelCore.UI.WriteLine("Running disease progression");
             ////////
             //DEBUG PARAMETERS
-            bool debugOutputTransitions = true;
-            bool debugDumpSiteInformation = true;
+            bool debugOutputTransitions = false;
+            bool debugDumpSiteInformation = false;
             bool debugInfectionStatusOutput = true;
+            bool debugPerformTiming = true;
+            bool debugOutputInfectionStateCounts = true;
             byte debugInfectionStatusOutputScaleFactor = 10;
             ////////
+            
+            Stopwatch stopwatch = new Stopwatch();
+            if (debugPerformTiming) {
+                stopwatch.Start();
+            }
             
             IEnumerable<ActiveSite> sites = ModelCore.Landscape.ActiveSites;
 
@@ -109,57 +117,84 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     ignoredSites.Add((siteLocation.Row, siteLocation.Column));
                 }
             }
+            if (debugPerformTiming) {
+                ModelCore.UI.WriteLine($"Infection detection finished: {stopwatch.ElapsedMilliseconds} ms");
+            }
 
             if (debugInfectionStatusOutput) {
-                string outputPath = $"./infection_timeline/infection_state_{modelCore.CurrentTime}.png";
-                System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(outputPath));
-                var landscapeDimensions = PlugIn.ModelCore.Landscape.Dimensions;
-                (int landscapeX, int landscapeY) = (landscapeDimensions.Rows, landscapeDimensions.Columns);
-                Color healthyColor = Color.Green;
-                Color infectedColor = Color.Red;
-                Color ignoredColor = Color.Blue;
-                byte scaleFactor = debugInfectionStatusOutputScaleFactor;
-                Bitmap bitmap = new Bitmap(landscapeX * scaleFactor, landscapeY * scaleFactor, PixelFormat.Format32bppArgb);
-                foreach ((int x, int y) in healthySites) {
-                    int actualX = (x - 1) * scaleFactor;
-                    int actualY = (y - 1) * scaleFactor;
-                    for (int i = 0; i < scaleFactor; i++) {
-                        for (int j = 0; j < scaleFactor; j++) {
-                            int pixelX = actualX + i;
-                            int pixelY = actualY + j;
-                            if (pixelX >= 0 && pixelX < bitmap.Width && pixelY >= 0 && pixelY < bitmap.Height) {
-                                bitmap.SetPixel(pixelX, pixelY, healthyColor);
+                var healthySitesCopy = new HashSet<(int x, int y)>(healthySites);
+                var infectedSitesCopy = new HashSet<(int x, int y)>(infectedSites);
+                var ignoredSitesCopy = new HashSet<(int x, int y)>(ignoredSites);
+                
+                Task.Run(() => {
+                    Stopwatch outputStopwatch = new Stopwatch();
+                    if (debugPerformTiming) {
+                        outputStopwatch.Start();
+                    }
+                    try {
+                        string outputPath = $"./infection_timeline/infection_state_{modelCore.CurrentTime}.png";
+                        System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(outputPath));
+                        var landscapeDimensions = ModelCore.Landscape.Dimensions;
+                        (int landscapeX, int landscapeY) = (landscapeDimensions.Rows, landscapeDimensions.Columns);
+                        Color healthyColor = Color.Green;
+                        Color infectedColor = Color.Red;
+                        Color ignoredColor = Color.Blue;
+                        byte scaleFactor = debugInfectionStatusOutputScaleFactor;
+                        Bitmap bitmap = new Bitmap(landscapeX * scaleFactor, landscapeY * scaleFactor, PixelFormat.Format32bppArgb);
+                        
+                        foreach ((int x, int y) in healthySitesCopy) {
+                            int actualX = (x - 1) * scaleFactor;
+                            int actualY = (y - 1) * scaleFactor;
+                            for (int i = 0; i < scaleFactor; i++) {
+                                for (int j = 0; j < scaleFactor; j++) {
+                                    int pixelX = actualX + i;
+                                    int pixelY = actualY + j;
+                                    if (pixelX >= 0 && pixelX < bitmap.Width && pixelY >= 0 && pixelY < bitmap.Height) {
+                                        bitmap.SetPixel(pixelX, pixelY, healthyColor);
+                                    }
+                                }
                             }
                         }
-                    }
-                }
-                foreach ((int x, int y) in infectedSites) {
-                    int actualX = (x - 1) * scaleFactor;
-                    int actualY = (y - 1) * scaleFactor;
-                    for (int i = 0; i < scaleFactor; i++) {
-                        for (int j = 0; j < scaleFactor; j++) {
-                            int pixelX = actualX + i;
-                            int pixelY = actualY + j;
-                            if (pixelX >= 0 && pixelX < bitmap.Width && pixelY >= 0 && pixelY < bitmap.Height) {
-                                bitmap.SetPixel(pixelX, pixelY, infectedColor);
+                        
+                        foreach ((int x, int y) in infectedSitesCopy) {
+                            int actualX = (x - 1) * scaleFactor;
+                            int actualY = (y - 1) * scaleFactor;
+                            for (int i = 0; i < scaleFactor; i++) {
+                                for (int j = 0; j < scaleFactor; j++) {
+                                    int pixelX = actualX + i;
+                                    int pixelY = actualY + j;
+                                    if (pixelX >= 0 && pixelX < bitmap.Width && pixelY >= 0 && pixelY < bitmap.Height) {
+                                        bitmap.SetPixel(pixelX, pixelY, infectedColor);
+                                    }
+                                }
                             }
                         }
-                    }
-                }
-                foreach ((int x, int y) in ignoredSites) {
-                    int actualX = (x - 1) * scaleFactor;
-                    int actualY = (y - 1) * scaleFactor;
-                    for (int i = 0; i < scaleFactor; i++) {
-                        for (int j = 0; j < scaleFactor; j++) {
-                            int pixelX = actualX + i;
-                            int pixelY = actualY + j;
-                            if (pixelX >= 0 && pixelX < bitmap.Width && pixelY >= 0 && pixelY < bitmap.Height) {
-                                bitmap.SetPixel(pixelX, pixelY, ignoredColor);
+                        
+                        foreach ((int x, int y) in ignoredSitesCopy) {
+                            int actualX = (x - 1) * scaleFactor;
+                            int actualY = (y - 1) * scaleFactor;
+                            for (int i = 0; i < scaleFactor; i++) {
+                                for (int j = 0; j < scaleFactor; j++) {
+                                    int pixelX = actualX + i;
+                                    int pixelY = actualY + j;
+                                    if (pixelX >= 0 && pixelX < bitmap.Width && pixelY >= 0 && pixelY < bitmap.Height) {
+                                        bitmap.SetPixel(pixelX, pixelY, ignoredColor);
+                                    }
+                                }
                             }
                         }
+                        
+                        bitmap.Save(outputPath, ImageFormat.Png);
                     }
-                }
-                bitmap.Save(outputPath, ImageFormat.Png);
+                    catch (Exception ex) {
+                        ModelCore.UI.WriteLine($"Debug bitmap generation failed: {ex.Message}");
+                        throw;
+                    }
+                    if (debugPerformTiming) {
+                        outputStopwatch.Stop();
+                        ModelCore.UI.WriteLine($"Finished outputting infection state: {outputStopwatch.ElapsedMilliseconds} ms");
+                    }
+                });
             }
 
             // compute relative site positions
@@ -196,9 +231,18 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     newlyInfectedSites.Add(healthySite);
                 }
             }
+            if (debugOutputInfectionStateCounts) {
+                ModelCore.UI.WriteLine($"Healthy sites: {healthySites.Count}");
+                ModelCore.UI.WriteLine($"Infected sites: {infectedSites.Count}");
+                ModelCore.UI.WriteLine($"Ignored sites: {ignoredSites.Count}");
+                ModelCore.UI.WriteLine($"Newly infected sites: {newlyInfectedSites.Count}");
+            }
             healthySites.Clear();
             infectedSites.UnionWith(newlyInfectedSites);
             newlyInfectedSites.Clear();
+            if (debugPerformTiming) {
+                ModelCore.UI.WriteLine($"Finished determining which sites are newly infected: {stopwatch.ElapsedMilliseconds} ms");
+            }
             ///////////////////
             
             // Species string to ISpecies lookup
@@ -264,10 +308,10 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                                 if (remainingBiomass == 0) {
                                     break;
                                 }
-                                //Console.WriteLine($"Before rounding: {concreteCohort.Data.Biomass * proportion}");
+                                //ModelCore.UI.WriteLine($"Before rounding: {concreteCohort.Data.Biomass * proportion}");
                                 int transfer = (int)Math.Round(concreteCohort.Data.Biomass * proportion);
-                                //Console.WriteLine($"Rounded: {Math.Round(concreteCohort.Data.Biomass * proportion)}");
-                                //Console.WriteLine($"Cast: {transfer}");
+                                //ModelCore.UI.WriteLine($"Rounded: {Math.Round(concreteCohort.Data.Biomass * proportion)}");
+                                //ModelCore.UI.WriteLine($"Cast: {transfer}");
                                 if (remainingBiomass - transfer < 0) {
                                     transfer = remainingBiomass;
                                 }
@@ -284,6 +328,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                                     if (debugOutputTransitions) {
                                         ModelCore.UI.WriteLine($"Transitioned to dead: Age: {concreteCohort.Data.Age}, Biomass: {concreteCohort.Data.Biomass}, Species: {speciesCohorts.Species.Name}");
                                     }
+                                    SiteVars.AddResproutLifetime(siteLocation.Row, siteLocation.Column);
                                     continue; //short-circuit
                                 }
                                 ISpecies targetSpecies = speciesNameToISpecies[species];
@@ -340,7 +385,14 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     data.Value.Clear();
                 }
             }
+            if (debugPerformTiming) {
+                stopwatch.Stop();
+                ModelCore.UI.WriteLine($"Finished proportioning all sites: {stopwatch.ElapsedMilliseconds} ms");
+            }
         }
+
+
+
         public override void AddCohortData() { return; }
     }
 }
