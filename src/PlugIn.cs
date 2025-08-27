@@ -84,6 +84,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             
             Dimensions landscapeDimensions = ModelCore.Landscape.Dimensions;
             int worstCaseMaximumUniformDispersalDistance = SiteVars.GetWorstCaseMaximumUniformDispersalDistance();
+            List<(int x, int y)> precalculatedDispersalDistanceOffsets = SiteVars.PrecalculatedDispersalDistanceOffsets;
             
             Stopwatch stopwatch = new Stopwatch();
             if (debugPerformTiming) {
@@ -215,16 +216,13 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             Stopwatch stopwatch1 = new Stopwatch();
             stopwatch1.Start();
             double[,] healthySiteCumulativeDispersalProbabilities = new double[landscapeDimensions.Columns, landscapeDimensions.Rows];
-            foreach ((int x, int y) healthySite in healthySites) {
-                foreach ((int xOffset, int yOffset) in SiteVars.PrecalculatedDispersalDistanceOffsets) {
-                    (int infectedSiteX, int infectedSiteY) = (healthySite.x + xOffset, healthySite.y + yOffset);
-                    if (infectedSites.Contains((infectedSiteX, infectedSiteY))) {
-                        (int x, int y) relativeGridOffset = SiteVars.CalculateRelativeGridOffset(infectedSiteX, infectedSiteY, healthySite.x, healthySite.y);
-                        Debug.Assert(relativeGridOffset.x == healthySite.x - xOffset && relativeGridOffset.y == healthySite.y - yOffset);
-                        (int x, int y) canonicalizedRelativeGridOffset = SiteVars.CanonicalizeToHalfQuadrant(relativeGridOffset.x, relativeGridOffset.y);
+            foreach ((int x, int y) infectedSite in infectedSites) {
+                foreach ((int xOffset, int yOffset) in precalculatedDispersalDistanceOffsets) {
+                    (int healthySiteX, int healthySiteY) = (infectedSite.x + xOffset, infectedSite.y + yOffset);
+                    if (healthySites.Contains((healthySiteX, healthySiteY))) {
+                        (int x, int y) canonicalizedRelativeGridOffset = SiteVars.CanonicalizeToHalfQuadrant(xOffset, yOffset);
                         double dispersalProbability = SiteVars.GetDispersalProbability(canonicalizedRelativeGridOffset.x, canonicalizedRelativeGridOffset.y);
-                        Debug.Assert(dispersalProbability >= 0.0 && dispersalProbability <= 1.0);
-                        healthySiteCumulativeDispersalProbabilities[healthySite.x - 1, healthySite.y - 1] += dispersalProbability;
+                        healthySiteCumulativeDispersalProbabilities[healthySiteX - 1, healthySiteY - 1] += dispersalProbability;
                     }
                 }
             }
