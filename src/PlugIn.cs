@@ -96,13 +96,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             ////////////////////
             // stores literal site positions of either sites which only contain the healthy species
             // specified within the matrix or sites which contain one of the infected variants
-            bool[,] healthySites = new bool[landscapeDimensions.Columns, landscapeDimensions.Rows];
-            bool[,] infectedSites = new bool[landscapeDimensions.Columns, landscapeDimensions.Rows];
-            //bool[,] newlyInfectedSites = new bool[landscapeDimensions.Columns, landscapeDimensions.Rows];
-            bool[,] ignoredSites = new bool[landscapeDimensions.Columns, landscapeDimensions.Rows];
+            bool[,] sitesForProportioning = new bool[landscapeDimensions.Columns, landscapeDimensions.Rows];
             List<(int x, int y)> healthySitesList = new List<(int x, int y)>();
             List<(int x, int y)> infectedSitesList = new List<(int x, int y)>();
-            List<(int x, int y)> newlyInfectedSitesList = new List<(int x, int y)>();
             List<(int x, int y)> ignoredSitesList = new List<(int x, int y)>();
 
             
@@ -119,14 +115,12 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 }
                 Location siteLocation = site.Location;
                 if (containsHealthySpecies && !containsInfectedSpecies) {
-                    healthySites[siteLocation.Column - 1, siteLocation.Row - 1] = true;
-                    healthySitesList.Add((siteLocation.Column - 1, siteLocation.Row - 1));
+                    healthySitesList.Add((siteLocation.Column, siteLocation.Row));
                 } else if (containsInfectedSpecies) {
-                    infectedSites[siteLocation.Column - 1, siteLocation.Row - 1] = true;
-                    infectedSitesList.Add((siteLocation.Column - 1, siteLocation.Row - 1));
+                    infectedSitesList.Add((siteLocation.Column, siteLocation.Row));
+                    sitesForProportioning[siteLocation.Column - 1, siteLocation.Row - 1] = true;
                 } else {
-                    ignoredSites[siteLocation.Column - 1, siteLocation.Row - 1] = true;
-                    ignoredSitesList.Add((siteLocation.Column - 1, siteLocation.Row - 1));
+                    ignoredSitesList.Add((siteLocation.Column, siteLocation.Row));
                 }
             }
 
@@ -135,15 +129,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
 
             if (debugInfectionStatusOutput) {
-                //List<(int x, int y)> healthySitesListCopy = new List<(int x, int y)>(healthySitesList);
-                //List<(int x, int y)> infectedSitesListCopy = new List<(int x, int y)>(infectedSitesList);
-                //List<(int x, int y)> ignoredSitesListCopy = new List<(int x, int y)>(ignoredSitesList);
-                bool[,] healthySitesCopy = (bool[,])healthySites.Clone();
-                bool[,] infectedSitesCopy = (bool[,])infectedSites.Clone();
-                bool[,] ignoredSitesCopy = (bool[,])ignoredSites.Clone();
-                //var healthySitesCopy = new HashSet<(int x, int y)>(healthySites);
-                //var infectedSitesCopy = new HashSet<(int x, int y)>(infectedSites);
-                //var ignoredSitesCopy = new HashSet<(int x, int y)>(ignoredSites);
+                List<(int x, int y)> healthySitesListCopy = new List<(int x, int y)>(healthySitesList);
+                List<(int x, int y)> infectedSitesListCopy = new List<(int x, int y)>(infectedSitesList);
+                List<(int x, int y)> ignoredSitesListCopy = new List<(int x, int y)>(ignoredSitesList);
                 
                 Task.Run(() => {
                     Stopwatch outputStopwatch = new Stopwatch();
@@ -160,26 +148,37 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                         byte scaleFactor = debugInfectionStatusOutputScaleFactor;
                         Bitmap bitmap = new Bitmap(landscapeX * scaleFactor, landscapeY * scaleFactor, PixelFormat.Format32bppArgb);
                         
-                        for (int x = 0; x < landscapeDimensions.Columns; x++) {
-                            for (int y = 0; y < landscapeDimensions.Rows; y++) {
-                                int actualX = x * scaleFactor;
-                                int actualY = y * scaleFactor;
-                                for (int i = 0; i < scaleFactor; i++) {
-                                    for (int j = 0; j < scaleFactor; j++) {
-                                        int pixelX = actualX + i;
-                                        int pixelY = actualY + j;
-                                        Color pixelColor;
-                                        if (healthySitesCopy[x, y]) {
-                                            pixelColor = healthyColor;
-                                        } else if (infectedSitesCopy[x, y]) {
-                                            pixelColor = infectedColor;
-                                        } else {
-                                            pixelColor = ignoredColor;
-                                        };
-                                        bitmap.SetPixel(pixelX, pixelY, pixelColor);
-                                    }
+                        foreach ((int x, int y) in healthySitesListCopy) {
+                            int actualX = (x - 1) * scaleFactor;
+                            int actualY = (y - 1) * scaleFactor;
+                            for (int i = 0; i < scaleFactor; i++) {
+                                for (int j = 0; j < scaleFactor; j++) {
+                                    int pixelX = actualX + i;
+                                    int pixelY = actualY + j;
+                                    bitmap.SetPixel(pixelX, pixelY, healthyColor);
                                 }
-                                
+                            }
+                        }
+                        foreach ((int x, int y) in infectedSitesListCopy) {
+                            int actualX = (x - 1) * scaleFactor;
+                            int actualY = (y - 1) * scaleFactor;
+                            for (int i = 0; i < scaleFactor; i++) {
+                                for (int j = 0; j < scaleFactor; j++) {
+                                    int pixelX = actualX + i;
+                                    int pixelY = actualY + j;
+                                    bitmap.SetPixel(pixelX, pixelY, infectedColor);
+                                }
+                            }
+                        }
+                        foreach ((int x, int y) in ignoredSitesListCopy) {
+                            int actualX = (x - 1) * scaleFactor;
+                            int actualY = (y - 1) * scaleFactor;
+                            for (int i = 0; i < scaleFactor; i++) {
+                                for (int j = 0; j < scaleFactor; j++) {
+                                    int pixelX = actualX + i;
+                                    int pixelY = actualY + j;
+                                    bitmap.SetPixel(pixelX, pixelY, ignoredColor);
+                                }
                             }
                         }
                         
@@ -191,10 +190,12 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     }
                     if (debugPerformTiming) {
                         outputStopwatch.Stop();
-                        ModelCore.UI.WriteLine($"Finished outputting infection state: {outputStopwatch.ElapsedMilliseconds} ms");
+                        ModelCore.UI.WriteLine($"      Finished outputting infection state: {outputStopwatch.ElapsedMilliseconds} ms");
                     }
                 });
             }
+            
+            int numberOfInfectedSitesBeforeDispersal = infectedSitesList.Count;
 
             // compute relative site positions
             // compute cumulative probability of infection
@@ -207,7 +208,6 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             // site to determine whether it becomes infected.
             Stopwatch stopwatch1 = new Stopwatch();
             stopwatch1.Start();
-            //double[,] healthySiteCumulativeDispersalProbabilities = new double[landscapeDimensions.Columns, landscapeDimensions.Rows];
             List<(int x, int y, double cumulativeDispersalProbability)> healthySiteCumulativeDispersalProbabilities = new List<(int x, int y, double cumulativeDispersalProbability)>();
             foreach ((int x, int y) healthySite in healthySitesList) {
                 double cumulativeDispersalProbability = 0.0;
@@ -228,7 +228,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 Random rand = new Random();
                 double random = rand.NextDouble();
                 if (random <= healthySite.cumulativeDispersalProbability) {
-                    newlyInfectedSitesList.Add((healthySite.x, healthySite.y));
+                    infectedSitesList.Add((healthySite.x, healthySite.y));
+                    sitesForProportioning[healthySite.x - 1, healthySite.y - 1] = true;
                 }
             }
             stopwatch1.Stop();
@@ -238,11 +239,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 ModelCore.UI.WriteLine($"Healthy sites: {healthySitesList.Count}");
                 ModelCore.UI.WriteLine($"Infected sites: {infectedSitesList.Count}");
                 ModelCore.UI.WriteLine($"Ignored sites: {ignoredSitesList.Count}");
-                ModelCore.UI.WriteLine($"Newly infected sites: {newlyInfectedSitesList.Count}");
+                ModelCore.UI.WriteLine($"Newly infected sites: {infectedSitesList.Count - numberOfInfectedSitesBeforeDispersal}");
             }
             healthySitesList.Clear();
-            infectedSitesList.AddRange(newlyInfectedSitesList);
-            newlyInfectedSitesList.Clear();
             if (debugPerformTiming) {
                 ModelCore.UI.WriteLine($"Finished determining which sites are newly infected: {stopwatch.ElapsedMilliseconds} ms");
             }
@@ -257,11 +256,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             Dictionary<ISpecies, Dictionary<ushort, int>> newSiteCohortsDictionary = new Dictionary<ISpecies, Dictionary<ushort, int>>();
             foreach (ActiveSite site in sites) {
                 Location siteLocation = site.Location;
-                if (healthySitesList.Contains((siteLocation.Row - 1, siteLocation.Column - 1))) {
-                    continue;
-                } else if (!infectedSitesList.Contains((siteLocation.Row - 1, siteLocation.Column - 1))) {
-                    continue;
-                }
+                if (!sitesForProportioning[siteLocation.Column - 1, siteLocation.Row - 1]) continue;
                 SiteCohorts siteCohorts = SiteVars.Cohorts[site];
 
                 if (debugDumpSiteInformation) {
