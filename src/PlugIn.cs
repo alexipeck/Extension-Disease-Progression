@@ -116,11 +116,11 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 }
                 Location siteLocation = site.Location;
                 if (containsHealthySpecies && !containsInfectedSpecies) {
-                    healthySites.Add((siteLocation.Row, siteLocation.Column));
+                    healthySites.Add((siteLocation.Column, siteLocation.Row));
                 } else if (containsInfectedSpecies) {
-                    infectedSites.Add((siteLocation.Row, siteLocation.Column));
+                    infectedSites.Add((siteLocation.Column, siteLocation.Row));
                 } else if (debugInfectionStatusOutput) {
-                    ignoredSites.Add((siteLocation.Row, siteLocation.Column));
+                    ignoredSites.Add((siteLocation.Column, siteLocation.Row));
                 }
             }
             if (debugPerformTiming) {
