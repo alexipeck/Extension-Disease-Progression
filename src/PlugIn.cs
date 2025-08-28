@@ -212,32 +212,28 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             stopwatch1.Start();
             double[,] healthySiteCumulativeDispersalProbabilities = new double[landscapeDimensions.Columns, landscapeDimensions.Rows];
             
-            for (int x = 0; x < landscapeDimensions.Columns; x++) {
-                for (int y = 0; y < landscapeDimensions.Rows; y++) {
-                    foreach ((int xOffset, int yOffset) in precalculatedDispersalDistanceOffsets) {
-                        (int healthySiteX, int healthySiteY) = (x + xOffset, y + yOffset);
-                        if (!(healthySiteX >= 0
-                            && healthySiteX < landscapeDimensions.Columns
-                            && healthySiteY >= 0
-                            && healthySiteY < landscapeDimensions.Rows
-                            && healthySites[healthySiteX, healthySiteY])) continue;
-                        (int x, int y) canonicalizedRelativeGridOffset = SiteVars.CanonicalizeToHalfQuadrant(xOffset, yOffset);
-                        double dispersalProbability = SiteVars.GetDispersalProbability(canonicalizedRelativeGridOffset.x, canonicalizedRelativeGridOffset.y);
-                        healthySiteCumulativeDispersalProbabilities[healthySiteX, healthySiteY] += dispersalProbability;
-                    }
+            foreach ((int x, int y) infectedSite in infectedSitesList) {
+                foreach ((int xOffset, int yOffset) in precalculatedDispersalDistanceOffsets) {
+                    (int healthySiteX, int healthySiteY) = (infectedSite.x + xOffset, infectedSite.y + yOffset);
+                    if (!(healthySiteX >= 0
+                        && healthySiteX < landscapeDimensions.Columns
+                        && healthySiteY >= 0
+                        && healthySiteY < landscapeDimensions.Rows
+                        && healthySites[healthySiteX, healthySiteY])) continue;
+                    (int x, int y) canonicalizedRelativeGridOffset = SiteVars.CanonicalizeToHalfQuadrant(xOffset, yOffset);
+                    double dispersalProbability = SiteVars.GetDispersalProbability(canonicalizedRelativeGridOffset.x, canonicalizedRelativeGridOffset.y);
+                    healthySiteCumulativeDispersalProbabilities[healthySiteX, healthySiteY] += dispersalProbability;
                 }
             }
-            for (int x = 0; x < landscapeDimensions.Columns; x++) {
-                for (int y = 0; y < landscapeDimensions.Rows; y++) {
-                    double cumulativeDispersalProbability = healthySiteCumulativeDispersalProbabilities[x, y];
-                    if (cumulativeDispersalProbability == 0.0) {
-                        continue;
-                    }
-                    Random rand = new Random();
-                    double random = rand.NextDouble();
-                    if (random <= cumulativeDispersalProbability) {
-                        newlyInfectedSites[x, y] = true;
-                    }
+            foreach ((int x, int y) healthySite in healthySitesList) {
+                double cumulativeDispersalProbability = healthySiteCumulativeDispersalProbabilities[healthySite.x, healthySite.y];
+                if (cumulativeDispersalProbability == 0.0) {
+                    continue;
+                }
+                Random rand = new Random();
+                double random = rand.NextDouble();
+                if (random <= cumulativeDispersalProbability) {
+                    newlyInfectedSites[healthySite.x, healthySite.y] = true;
                 }
             }
             
