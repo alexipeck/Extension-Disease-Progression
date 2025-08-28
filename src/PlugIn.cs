@@ -214,11 +214,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 foreach ((int x, int y) infectedSite in infectedSitesList) {
                     (int x, int y) relativeGridOffset = SiteVars.CalculateRelativeGridOffset(infectedSite.x, infectedSite.y, healthySite.x, healthySite.y);
                     (int x, int y) canonicalizedRelativeGridOffset = SiteVars.CanonicalizeToHalfQuadrant(relativeGridOffset.x, relativeGridOffset.y);
-                    if (canonicalizedRelativeGridOffset.x >= worstCaseMaximumUniformDispersalDistance || canonicalizedRelativeGridOffset.y >= worstCaseMaximumUniformDispersalDistance) {
-                        continue;
-                    }
+                    if (canonicalizedRelativeGridOffset.x >= worstCaseMaximumUniformDispersalDistance || canonicalizedRelativeGridOffset.y >= worstCaseMaximumUniformDispersalDistance) continue;
                     double dispersalProbability = SiteVars.GetDispersalProbability(canonicalizedRelativeGridOffset.x, canonicalizedRelativeGridOffset.y);
-                    Debug.Assert(dispersalProbability >= 0.0 && dispersalProbability <= 1.0);
+                    //Debug.Assert(dispersalProbability >= 0.0 && dispersalProbability <= 1.0);
                     cumulativeDispersalProbability += dispersalProbability;
                 }
                 if (cumulativeDispersalProbability == 0.0) continue;
