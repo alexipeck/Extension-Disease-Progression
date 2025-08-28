@@ -15,6 +15,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         private static Dictionary<(int x, int y), double> indexOffsetDispersalProbabilityDictionary;
         private static Dictionary<(int x, int y), int> resproutLifetimeDictionary;
         private static int worstCaseMaximumUniformDispersalDistance;
+        private static List<(int x, int y)> precalculatedDispersalDistanceOffsets;
         //TODO: Add to input parameters
         private static int resproutMaxLongevity;
         //TODO: Add to input parameters
@@ -26,6 +27,14 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             (int landscapeX, int landscapeY) = (landscapeDimensions.Rows, landscapeDimensions.Columns);
             PlugIn.ModelCore.UI.WriteLine($"Generating dispersal lookup matrix for {landscapeX}x{landscapeY} landscape");
             worstCaseMaximumUniformDispersalDistance = (int)Math.Ceiling(parameters.DispersalMaxDistance / PlugIn.ModelCore.CellLength);
+            
+            precalculatedDispersalDistanceOffsets = new List<(int x, int y)>();
+            for (int x = -worstCaseMaximumUniformDispersalDistance; x <= worstCaseMaximumUniformDispersalDistance; x++) {
+                for (int y = -worstCaseMaximumUniformDispersalDistance; y <= worstCaseMaximumUniformDispersalDistance; y++) {
+                    if ((x == 0 && y == 0) || CalculateEuclideanDistance(x, y, 0, 0) > worstCaseMaximumUniformDispersalDistance) continue;
+                    precalculatedDispersalDistanceOffsets.Add((x, y));
+                }
+            };
             indexOffsetDispersalProbabilityDictionary = GenerateDispersalLookupMatrix(parameters.DispersalProbabilityAlgorithm, parameters.AlphaCoefficient, PlugIn.ModelCore.CellLength, landscapeX, landscapeY, parameters.DispersalMaxDistance);
             //TODO: Initializes empty for now, but realistically the spinup cycle should add some sites to this
             resproutLifetimeDictionary = new Dictionary<(int x, int y), int>();
@@ -34,6 +43,12 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             //TODO: Add to input parameters
             resproutHalfLife = 2/* parameters.resproutHalfLife */;
             PlugIn.ModelCore.UI.WriteLine($"Finished generating dispersal lookup matrix for {landscapeX}x{landscapeY} landscape");
+        }
+
+        public static List<(int x, int y)> PrecalculatedDispersalDistanceOffsets {
+            get {
+                return precalculatedDispersalDistanceOffsets;
+            }
         }
 
         public static int GetWorstCaseMaximumUniformDispersalDistance() {
@@ -87,7 +102,6 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
 
         private static Dictionary<(int x, int y), double> GenerateDispersalLookupMatrix(DispersalProbabilityAlgorithm dispersalType, double alphaCoefficient, float cellLength, int landscapeX, int landscapeY, int dispersalMaxDistance) {
             Debug.Assert(cellLength > 0);
-            worstCaseMaximumUniformDispersalDistance = (int)Math.Ceiling(dispersalMaxDistance / cellLength);
             float cellArea = cellLength * cellLength;
 
             Dictionary<(int x, int y), double> dispersalLookupMatrix = new Dictionary<(int x, int y), double>();
