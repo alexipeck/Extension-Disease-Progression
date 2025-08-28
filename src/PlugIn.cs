@@ -98,7 +98,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             // specified within the matrix or sites which contain one of the infected variants
             bool[,] healthySites = new bool[landscapeDimensions.Columns, landscapeDimensions.Rows];
             bool[,] infectedSites = new bool[landscapeDimensions.Columns, landscapeDimensions.Rows];
-            bool[,] newlyInfectedSites = new bool[landscapeDimensions.Columns, landscapeDimensions.Rows];
+            //bool[,] newlyInfectedSites = new bool[landscapeDimensions.Columns, landscapeDimensions.Rows];
             bool[,] ignoredSites = new bool[landscapeDimensions.Columns, landscapeDimensions.Rows];
             List<(int x, int y)> healthySitesList = new List<(int x, int y)>();
             List<(int x, int y)> infectedSitesList = new List<(int x, int y)>();
@@ -205,8 +205,12 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             // to do a nested loop for healthy->infected  and store the relative positions
             // then hold an accumilated probability for every healthy site, performing one RNG per healthy
             // site to determine whether it becomes infected.
-            double[,] healthySiteCumulativeDispersalProbabilities = new double[landscapeDimensions.Columns, landscapeDimensions.Rows];
+            Stopwatch stopwatch1 = new Stopwatch();
+            stopwatch1.Start();
+            //double[,] healthySiteCumulativeDispersalProbabilities = new double[landscapeDimensions.Columns, landscapeDimensions.Rows];
+            List<(int x, int y, double cumulativeDispersalProbability)> healthySiteCumulativeDispersalProbabilities = new List<(int x, int y, double cumulativeDispersalProbability)>();
             foreach ((int x, int y) healthySite in healthySitesList) {
+                double cumulativeDispersalProbability = 0.0;
                 foreach ((int x, int y) infectedSite in infectedSitesList) {
                     (int x, int y) relativeGridOffset = SiteVars.CalculateRelativeGridOffset(infectedSite.x, infectedSite.y, healthySite.x, healthySite.y);
                     (int x, int y) canonicalizedRelativeGridOffset = SiteVars.CanonicalizeToHalfQuadrant(relativeGridOffset.x, relativeGridOffset.y);
@@ -215,20 +219,20 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     }
                     double dispersalProbability = SiteVars.GetDispersalProbability(canonicalizedRelativeGridOffset.x, canonicalizedRelativeGridOffset.y);
                     Debug.Assert(dispersalProbability >= 0.0 && dispersalProbability <= 1.0);
-                    healthySiteCumulativeDispersalProbabilities[healthySite.x, healthySite.y] += dispersalProbability;
+                    cumulativeDispersalProbability += dispersalProbability;
                 }
+                if (cumulativeDispersalProbability == 0.0) continue;
+                healthySiteCumulativeDispersalProbabilities.Add((healthySite.x, healthySite.y, cumulativeDispersalProbability));
             }
-            foreach ((int x, int y) healthySite in healthySitesList) {
-                double cumulativeDispersalProbability = healthySiteCumulativeDispersalProbabilities[healthySite.x, healthySite.y];
-                if (cumulativeDispersalProbability == 0.0) {
-                    continue;
-                }
+            foreach ((int x, int y, double cumulativeDispersalProbability) healthySite in healthySiteCumulativeDispersalProbabilities) {
                 Random rand = new Random();
                 double random = rand.NextDouble();
-                if (random <= cumulativeDispersalProbability) {
-                    newlyInfectedSites[healthySite.x, healthySite.y] = true;
+                if (random <= healthySite.cumulativeDispersalProbability) {
+                    newlyInfectedSitesList.Add((healthySite.x, healthySite.y));
                 }
             }
+            stopwatch1.Stop();
+            ModelCore.UI.WriteLine($"TIMING: {stopwatch1.ElapsedMilliseconds} ms");
             
             if (debugOutputInfectionStateCounts) {
                 ModelCore.UI.WriteLine($"Healthy sites: {healthySitesList.Count}");
