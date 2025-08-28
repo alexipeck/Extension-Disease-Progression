@@ -105,8 +105,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             List<(int x, int y)> newlyInfectedSitesList = new List<(int x, int y)>();
             List<(int x, int y)> ignoredSitesList = new List<(int x, int y)>();
 
-            bool[,] debugNewlyInfectedSites = new bool[landscapeDimensions.Columns, landscapeDimensions.Rows];
-
+            
             // infection detection & adjustment pass
             foreach (ActiveSite site in sites) {
                 bool containsHealthySpecies = false;
@@ -206,44 +205,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             // to do a nested loop for healthy->infected  and store the relative positions
             // then hold an accumilated probability for every healthy site, performing one RNG per healthy
             // site to determine whether it becomes infected.
-            ModelCore.UI.WriteLine($"Precalculated dispersal distance offsets: {SiteVars.PrecalculatedDispersalDistanceOffsets.Count}");
-            //new method
-            Stopwatch stopwatch1 = new Stopwatch();
-            stopwatch1.Start();
             double[,] healthySiteCumulativeDispersalProbabilities = new double[landscapeDimensions.Columns, landscapeDimensions.Rows];
-            
-            foreach ((int x, int y) infectedSite in infectedSitesList) {
-                foreach ((int xOffset, int yOffset) in precalculatedDispersalDistanceOffsets) {
-                    (int healthySiteX, int healthySiteY) = (infectedSite.x + xOffset, infectedSite.y + yOffset);
-                    if (!(healthySiteX >= 0
-                        && healthySiteX < landscapeDimensions.Columns
-                        && healthySiteY >= 0
-                        && healthySiteY < landscapeDimensions.Rows
-                        && healthySites[healthySiteX, healthySiteY])) continue;
-                    (int x, int y) canonicalizedRelativeGridOffset = SiteVars.CanonicalizeToHalfQuadrant(xOffset, yOffset);
-                    double dispersalProbability = SiteVars.GetDispersalProbability(canonicalizedRelativeGridOffset.x, canonicalizedRelativeGridOffset.y);
-                    healthySiteCumulativeDispersalProbabilities[healthySiteX, healthySiteY] += dispersalProbability;
-                }
-            }
-            foreach ((int x, int y) healthySite in healthySitesList) {
-                double cumulativeDispersalProbability = healthySiteCumulativeDispersalProbabilities[healthySite.x, healthySite.y];
-                if (cumulativeDispersalProbability == 0.0) {
-                    continue;
-                }
-                Random rand = new Random();
-                double random = rand.NextDouble();
-                if (random <= cumulativeDispersalProbability) {
-                    newlyInfectedSites[healthySite.x, healthySite.y] = true;
-                }
-            }
-            
-            stopwatch1.Stop();
-            ModelCore.UI.WriteLine($"New method: {(int)stopwatch1.ElapsedMilliseconds} ms");
-            
-            //old method
-            Stopwatch stopwatch2 = new Stopwatch();
-            stopwatch2.Start();
-            healthySiteCumulativeDispersalProbabilities = new double[landscapeDimensions.Columns, landscapeDimensions.Rows];
             foreach ((int x, int y) healthySite in healthySitesList) {
                 foreach ((int x, int y) infectedSite in infectedSitesList) {
                     (int x, int y) relativeGridOffset = SiteVars.CalculateRelativeGridOffset(infectedSite.x, infectedSite.y, healthySite.x, healthySite.y);
@@ -267,8 +229,6 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     newlyInfectedSites[healthySite.x, healthySite.y] = true;
                 }
             }
-            stopwatch2.Stop();
-            ModelCore.UI.WriteLine($"Old method: {(int)stopwatch2.ElapsedMilliseconds} ms");
             
             if (debugOutputInfectionStateCounts) {
                 ModelCore.UI.WriteLine($"Healthy sites: {healthySitesList.Count}");
@@ -276,10 +236,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 ModelCore.UI.WriteLine($"Ignored sites: {ignoredSitesList.Count}");
                 ModelCore.UI.WriteLine($"Newly infected sites: {newlyInfectedSitesList.Count}");
             }
-            //Debug.Assert(newlyInfectedSites.SetEquals(debugNewlyInfectedSites));
             healthySitesList.Clear();
             infectedSitesList.AddRange(newlyInfectedSitesList);
-            //infectedSitesList.UnionWith(newlyInfectedSitesList);
             newlyInfectedSitesList.Clear();
             if (debugPerformTiming) {
                 ModelCore.UI.WriteLine($"Finished determining which sites are newly infected: {stopwatch.ElapsedMilliseconds} ms");
