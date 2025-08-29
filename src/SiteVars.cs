@@ -13,7 +13,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
     {
         private static ISiteVar<SiteCohorts> universalCohorts;
         private static double[,] indexOffsetDispersalProbability;
-        private static Dictionary<(int x, int y), int> resproutLifetimeDictionary;
+        private static (int x, int y) landscapeDimensions;
+        private static int[,] resproutLifetime;
         private static (int x, int y) worstCaseMaximumDispersalCellDistance;
         //NOTE: no longer necessary to exist
         private static List<(int x, int y)> precalculatedDispersalDistanceOffsets;
@@ -24,9 +25,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         private const int MAX_IMAGE_SIZE = 16384;
         public static void Initialize(ICore modelCore, IInputParameters parameters) {
             universalCohorts = PlugIn.ModelCore.GetSiteVar<SiteCohorts>("Succession.UniversalCohorts");
-            var landscapeDimensions = PlugIn.ModelCore.Landscape.Dimensions;
-            (int landscapeX, int landscapeY) = (landscapeDimensions.Rows, landscapeDimensions.Columns);
-            PlugIn.ModelCore.UI.WriteLine($"Generating dispersal lookup matrix for {landscapeX}x{landscapeY} landscape");
+            landscapeDimensions = (PlugIn.ModelCore.Landscape.Dimensions.Columns, PlugIn.ModelCore.Landscape.Dimensions.Rows);
+            PlugIn.ModelCore.UI.WriteLine($"Generating dispersal lookup matrix for {LandscapeDimensions.x}x{LandscapeDimensions.y} landscape");
             int worstCaseMaximumDispersalCellDistanceX = (int)Math.Ceiling(parameters.DispersalMaxDistance / PlugIn.ModelCore.CellLength);
             worstCaseMaximumDispersalCellDistance = (worstCaseMaximumDispersalCellDistanceX, (int)(worstCaseMaximumDispersalCellDistanceX * 0.7071067812) + 1);
             
@@ -37,14 +37,19 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     precalculatedDispersalDistanceOffsets.Add((x, y));
                 }
             };
-            indexOffsetDispersalProbability = GenerateDispersalLookupMatrix(parameters.DispersalProbabilityAlgorithm, parameters.AlphaCoefficient, PlugIn.ModelCore.CellLength, landscapeX, landscapeY, parameters.DispersalMaxDistance);
+            indexOffsetDispersalProbability = GenerateDispersalLookupMatrix(parameters.DispersalProbabilityAlgorithm, parameters.AlphaCoefficient, PlugIn.ModelCore.CellLength, LandscapeDimensions.x, LandscapeDimensions.y, parameters.DispersalMaxDistance);
             //TODO: Initializes empty for now, but realistically the spinup cycle should add some sites to this
-            resproutLifetimeDictionary = new Dictionary<(int x, int y), int>();
+            resproutLifetime = new int[LandscapeDimensions.x, LandscapeDimensions.y];
             //TODO: Add to input parameters
             resproutMaxLongevity = 5/* parameters.ResproutMaxLongevity */;
             //TODO: Add to input parameters
             resproutHalfLife = 2/* parameters.resproutHalfLife */;
-            PlugIn.ModelCore.UI.WriteLine($"Finished generating dispersal lookup matrix for {landscapeX}x{landscapeY} landscape");
+            PlugIn.ModelCore.UI.WriteLine($"Finished generating dispersal lookup matrix for {LandscapeDimensions.x}x{LandscapeDimensions.y} landscape");
+        }
+        public static int[,] ResproutLifetime {
+            get {
+                return resproutLifetime;
+            }
         }
 
         public static List<(int x, int y)> PrecalculatedDispersalDistanceOffsets {
@@ -52,23 +57,26 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 return precalculatedDispersalDistanceOffsets;
             }
         }
+        public static (int x, int y) LandscapeDimensions {
+            get {
+                return landscapeDimensions;
+            }
+        }
 
         public static (int x, int y) GetWorstCaseMaximumUniformDispersalDistance() {
             return worstCaseMaximumDispersalCellDistance;
         }
         public static void DecrementResproutLifetimes() {
-            foreach (var key in resproutLifetimeDictionary.Keys.ToList()) {
-                resproutLifetimeDictionary[key]--;
-                if (resproutLifetimeDictionary[key] < 0)
-                    resproutLifetimeDictionary.Remove(key);
+            for (int x = 0; x < LandscapeDimensions.x; x++) {
+                for (int y = 0; y < LandscapeDimensions.y; y++) {
+                    if (resproutLifetime[x, y] > 0) resproutLifetime[x, y]--;
+                }
             }
         }
         public static void AddResproutLifetime(int x, int y) {
             //TODO: This is a placeholder, determine a better way to implement lifetime
             int lifetime = resproutMaxLongevity;
-            if (!resproutLifetimeDictionary.ContainsKey((x, y)))
-                resproutLifetimeDictionary[(x, y)] = 0;
-            resproutLifetimeDictionary[(x, y)] = Math.Min(resproutLifetimeDictionary[(x, y)] + lifetime, resproutMaxLongevity);
+            resproutLifetime[x, y] = Math.Min(resproutLifetime[x, y] + lifetime, resproutMaxLongevity);    
         }
 
         public static (int x, int y) CalculateRelativeGridOffset(int x1, int y1, int x2, int y2) {

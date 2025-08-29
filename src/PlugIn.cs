@@ -9,6 +9,7 @@ using System;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Threading.Tasks;
+using Landis.Library.Succession;
 
 namespace Landis.Extension.Disturbance.DiseaseProgression
 {
@@ -81,8 +82,37 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             bool debugOutputInfectionStateCounts = true;
             byte debugInfectionStatusOutputScaleFactor = 10;
             ////////
-            
-            Dimensions landscapeDimensions = ModelCore.Landscape.Dimensions;
+            int landscapeX = SiteVars.LandscapeDimensions.x;
+            int landscapeY = SiteVars.LandscapeDimensions.y;
+            IEnumerable<ActiveSite> sites = ModelCore.Landscape.ActiveSites;
+
+            // Species string to ISpecies lookup
+            Dictionary<string, ISpecies> speciesNameToISpecies = new Dictionary<string, ISpecies>();
+            foreach (var species in ModelCore.Species) {
+                speciesNameToISpecies[species.Name] = species;
+            }
+
+            //Resprouting
+            int[,] resproutLifetime = SiteVars.ResproutLifetime;
+            bool[,] willResprout = new bool[landscapeX, landscapeY];
+            for (int x = 0; x < landscapeX; x++) {
+                for (int y = 0; y < landscapeY; y++) {
+                    if (resproutLifetime[x, y] > 0) {
+                        Random rand = new Random();
+                        double random = rand.NextDouble();
+                        if (random <= 0.05) willResprout[x, y] = true;
+                    }
+                }
+            }
+            SiteVars.DecrementResproutLifetimes();
+            ISpecies derivedHealthySpecies = speciesNameToISpecies[parameters.DerivedHealthySpecies];
+            foreach (ActiveSite site in sites) {
+                Location siteLocation = site.Location;
+                if (!willResprout[siteLocation.Column - 1, siteLocation.Row - 1]) continue;
+                Reproduction.AddNewCohort(derivedHealthySpecies, site, "resprout", 0);
+            }
+            //
+
             (int x, int y) worstCaseMaximumUniformDispersalDistance = SiteVars.GetWorstCaseMaximumUniformDispersalDistance();
             List<(int x, int y)> precalculatedDispersalDistanceOffsets = SiteVars.PrecalculatedDispersalDistanceOffsets;
             
@@ -91,9 +121,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 stopwatch.Start();
             }
             
-            IEnumerable<ActiveSite> sites = ModelCore.Landscape.ActiveSites;
 
-            bool[,] sitesForProportioning = new bool[landscapeDimensions.Columns, landscapeDimensions.Rows];
+            bool[,] sitesForProportioning = new bool[landscapeX, landscapeY];
             List<(int x, int y)> healthySitesList = new List<(int x, int y)>();
             List<(int x, int y)> infectedSitesList = new List<(int x, int y)>();
             List<(int x, int y)> ignoredSitesList = new List<(int x, int y)>();
@@ -138,7 +167,6 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     try {
                         string outputPath = $"./infection_timeline/infection_state_{modelCore.CurrentTime}.png";
                         System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(outputPath));
-                        (int landscapeX, int landscapeY) = (landscapeDimensions.Rows, landscapeDimensions.Columns);
                         Color healthyColor = Color.Green;
                         Color infectedColor = Color.Red;
                         Color ignoredColor = Color.Blue;
@@ -242,12 +270,6 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
             ///////////////////
             
-            // Species string to ISpecies lookup
-            Dictionary<string, ISpecies> speciesNameToISpecies = new Dictionary<string, ISpecies>();
-            foreach (var species in ModelCore.Species) {
-                speciesNameToISpecies[species.Name] = species;
-            }
-            
             Dictionary<ISpecies, Dictionary<ushort, int>> newSiteCohortsDictionary = new Dictionary<ISpecies, Dictionary<ushort, int>>();
             foreach (ActiveSite site in sites) {
                 Location siteLocation = site.Location;
@@ -321,7 +343,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                                     if (debugOutputTransitions) {
                                         ModelCore.UI.WriteLine($"Transitioned to dead: Age: {concreteCohort.Data.Age}, Biomass: {concreteCohort.Data.Biomass}, Species: {speciesCohorts.Species.Name}");
                                     }
-                                    SiteVars.AddResproutLifetime(siteLocation.Row, siteLocation.Column);
+                                    SiteVars.AddResproutLifetime(siteLocation.Row - 1, siteLocation.Column - 1);
                                     continue; //short-circuit
                                 }
                                 ISpecies targetSpecies = speciesNameToISpecies[species];
