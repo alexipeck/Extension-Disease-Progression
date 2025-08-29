@@ -12,9 +12,10 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
 {    public static class SiteVars
     {
         private static ISiteVar<SiteCohorts> universalCohorts;
-        private static Dictionary<(int x, int y), double> indexOffsetDispersalProbabilityDictionary;
+        private static double[,] indexOffsetDispersalProbability;
         private static Dictionary<(int x, int y), int> resproutLifetimeDictionary;
-        private static int worstCaseMaximumUniformDispersalDistance;
+        private static (int x, int y) worstCaseMaximumDispersalCellDistance;
+        //NOTE: no longer necessary to exist
         private static List<(int x, int y)> precalculatedDispersalDistanceOffsets;
         //TODO: Add to input parameters
         private static int resproutMaxLongevity;
@@ -26,16 +27,17 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             var landscapeDimensions = PlugIn.ModelCore.Landscape.Dimensions;
             (int landscapeX, int landscapeY) = (landscapeDimensions.Rows, landscapeDimensions.Columns);
             PlugIn.ModelCore.UI.WriteLine($"Generating dispersal lookup matrix for {landscapeX}x{landscapeY} landscape");
-            worstCaseMaximumUniformDispersalDistance = (int)Math.Ceiling(parameters.DispersalMaxDistance / PlugIn.ModelCore.CellLength);
+            int worstCaseMaximumDispersalCellDistanceX = (int)Math.Ceiling(parameters.DispersalMaxDistance / PlugIn.ModelCore.CellLength);
+            worstCaseMaximumDispersalCellDistance = (worstCaseMaximumDispersalCellDistanceX, (int)(worstCaseMaximumDispersalCellDistanceX * 0.7071067812) + 1);
             
             precalculatedDispersalDistanceOffsets = new List<(int x, int y)>();
-            for (int x = -worstCaseMaximumUniformDispersalDistance; x <= worstCaseMaximumUniformDispersalDistance; x++) {
-                for (int y = -worstCaseMaximumUniformDispersalDistance; y <= worstCaseMaximumUniformDispersalDistance; y++) {
-                    if ((x == 0 && y == 0) || CalculateEuclideanDistance(x, y, 0, 0) > worstCaseMaximumUniformDispersalDistance) continue;
+            for (int x = -worstCaseMaximumDispersalCellDistance.x; x <= worstCaseMaximumDispersalCellDistance.x; x++) {
+                for (int y = -worstCaseMaximumDispersalCellDistance.y; y <= worstCaseMaximumDispersalCellDistance.y; y++) {
+                    if ((x == 0 && y == 0) || CalculateEuclideanDistance(x, y, 0, 0) > worstCaseMaximumDispersalCellDistance.x) continue;
                     precalculatedDispersalDistanceOffsets.Add((x, y));
                 }
             };
-            indexOffsetDispersalProbabilityDictionary = GenerateDispersalLookupMatrix(parameters.DispersalProbabilityAlgorithm, parameters.AlphaCoefficient, PlugIn.ModelCore.CellLength, landscapeX, landscapeY, parameters.DispersalMaxDistance);
+            indexOffsetDispersalProbability = GenerateDispersalLookupMatrix(parameters.DispersalProbabilityAlgorithm, parameters.AlphaCoefficient, PlugIn.ModelCore.CellLength, landscapeX, landscapeY, parameters.DispersalMaxDistance);
             //TODO: Initializes empty for now, but realistically the spinup cycle should add some sites to this
             resproutLifetimeDictionary = new Dictionary<(int x, int y), int>();
             //TODO: Add to input parameters
@@ -51,8 +53,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
         }
 
-        public static int GetWorstCaseMaximumUniformDispersalDistance() {
-            return worstCaseMaximumUniformDispersalDistance;
+        public static (int x, int y) GetWorstCaseMaximumUniformDispersalDistance() {
+            return worstCaseMaximumDispersalCellDistance;
         }
         public static void DecrementResproutLifetimes() {
             foreach (var key in resproutLifetimeDictionary.Keys.ToList()) {
@@ -77,11 +79,10 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             return Math.Sqrt(Math.Pow(x2 - x1, 2) + Math.Pow(y2 - y1, 2));
         }
 
+        //If given non-half-quadrate-canonicalized value, it will crash.
+        //my safety mechanism for this exists elsewhere
         public static double GetDispersalProbability(int canonicalized_x, int canonicalized_y) {
-            if (indexOffsetDispersalProbabilityDictionary.TryGetValue((canonicalized_x, canonicalized_y), out double probability)) {
-                return probability;
-            }
-            return 0.0;
+            return indexOffsetDispersalProbability[canonicalized_x, canonicalized_y];
         }
 
         //Reduces memory usage of the dictionary by 87.5%
@@ -100,42 +101,43 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             return q1;
         }
 
-        private static Dictionary<(int x, int y), double> GenerateDispersalLookupMatrix(DispersalProbabilityAlgorithm dispersalType, double alphaCoefficient, float cellLength, int landscapeX, int landscapeY, int dispersalMaxDistance) {
+        private static double[,] GenerateDispersalLookupMatrix(DispersalProbabilityAlgorithm dispersalType, double alphaCoefficient, float cellLength, int landscapeX, int landscapeY, int dispersalMaxDistance) {
             Debug.Assert(cellLength > 0);
             float cellArea = cellLength * cellLength;
 
-            Dictionary<(int x, int y), double> dispersalLookupMatrix = new Dictionary<(int x, int y), double>();
             int maxRadius = Math.Max(landscapeX, landscapeY);
-            
+            double[,] dispersalLookupMatrix = new double[maxRadius, (int)(maxRadius * 0.7071067812) + 1];
+            int dispersalLookupMatrixCount = 0;
             for (int x = 0; x <= maxRadius; x++) {
                 for (int y = 0; y <= x; y++) {
                     double distance = CalculateEuclideanDistance(x, y, 0, 0) * cellLength;
                     if (distance > dispersalMaxDistance) continue;
                     double probability = CalculateDispersalProbability(dispersalType, distance, alphaCoefficient, cellLength, cellArea);
-                    dispersalLookupMatrix[(x, y)] = probability;
+                    dispersalLookupMatrix[x, y] = probability;
+                    dispersalLookupMatrixCount++;
                 }
             };
             
-            Console.WriteLine($"Generated dispersal matrix with {dispersalLookupMatrix.Count} entries");
+            Console.WriteLine($"Generated dispersal matrix with {dispersalLookupMatrixCount} entries");
             
             GenerateProbabilityMatrixImage(dispersalLookupMatrix);
             
-            return new Dictionary<(int x, int y), double>(dispersalLookupMatrix);
+            return dispersalLookupMatrix;
         }
 
-        private static void GenerateProbabilityMatrixImage(Dictionary<(int x, int y), double> dispersalLookupMatrix) {
+        private static void GenerateProbabilityMatrixImage(double[,] dispersalLookupMatrix) {
             int cellSize = 120;
-            while (cellSize * (worstCaseMaximumUniformDispersalDistance + 1) > MAX_IMAGE_SIZE) {
+            while (cellSize * (worstCaseMaximumDispersalCellDistance.x + 1) > MAX_IMAGE_SIZE) {
                 cellSize--;
             }
             
-            int matrixWidth = Math.Min(worstCaseMaximumUniformDispersalDistance + 1, MAX_IMAGE_SIZE / cellSize);
-            int matrixHeight = Math.Min(worstCaseMaximumUniformDispersalDistance + 1, MAX_IMAGE_SIZE / cellSize);
+            int matrixWidth = Math.Min(worstCaseMaximumDispersalCellDistance.x + 1, MAX_IMAGE_SIZE / cellSize);
+            int matrixHeight = (int)(matrixWidth * 0.7071067812) + 1;
             
             GenerateMatrixImage(dispersalLookupMatrix, matrixWidth, matrixHeight, cellSize);
         }
         
-        private static void GenerateMatrixImage(Dictionary<(int x, int y), double> dispersalLookupMatrix, int matrixWidth, int matrixHeight, int cellSize) {
+        private static void GenerateMatrixImage(double[,] dispersalLookupMatrix, int matrixWidth, int matrixHeight, int cellSize) {
             int imageWidth = matrixWidth * cellSize;
             //0.7071067812 is 1/1.4142135624 being half of pythagoras' constant
             int imageHeight = (int)(imageWidth * 0.7071067812) + 1;
@@ -146,6 +148,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
             
             Console.WriteLine($"Image dimensions: {imageWidth}x{imageHeight}");
+            Console.WriteLine($"Matrix dimensions: {matrixWidth}x{matrixHeight}");
             
             using (Bitmap bitmap = new Bitmap(imageWidth, imageHeight))
             using (Graphics graphics = Graphics.FromImage(bitmap))
@@ -157,30 +160,30 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 {
                     for (int gridY = 0; gridY < matrixHeight; gridY++) {
                         for (int gridX = 0; gridX < matrixWidth; gridX++) {
-                            if (dispersalLookupMatrix.TryGetValue((gridX, gridY), out double probability)) {
-                                int pixelX = gridX * cellSize;
-                                int pixelY = gridY * cellSize;
-                                
-                                string probabilityText;
-                                if (probability == 0.0) {
-                                    probabilityText = "0";
-                                } else if (probability < 0.00000001) {
-                                    probabilityText = "~0";
-                                } else {
-                                    probabilityText = probability.ToString("E2");
-                                }
-                                
-                                SizeF textSize = graphics.MeasureString(probabilityText, font);
-                                float textX = pixelX + (cellSize - textSize.Width) / 2;
-                                float textY = pixelY + (cellSize - textSize.Height) / 2;
-                                
-                                graphics.DrawString(probabilityText, font, textBrush, textX, textY);
+                            double probability = dispersalLookupMatrix[gridX, gridY];
+                            if (probability == 0.0) continue;
+                            int pixelX = gridX * cellSize;
+                            int pixelY = gridY * cellSize;
+                            
+                            string probabilityText;
+                            if (probability == 0.0) {
+                                probabilityText = "0";
+                            } else if (probability < 0.00000001) {
+                                probabilityText = "~0";
+                            } else {
+                                probabilityText = probability.ToString("E2");
                             }
+                            
+                            SizeF textSize = graphics.MeasureString(probabilityText, font);
+                            float textX = pixelX + (cellSize - textSize.Width) / 2;
+                            float textY = pixelY + (cellSize - textSize.Height) / 2;
+                            
+                            graphics.DrawString(probabilityText, font, textBrush, textX, textY);
                         }
                     }
                 }
                 
-                string filename = $"canonicalized_dispersal_probability_matrix_radius_{worstCaseMaximumUniformDispersalDistance}.png";
+                string filename = $"canonicalized_dispersal_probability_matrix_radius_{worstCaseMaximumDispersalCellDistance}.png";
                 bitmap.Save(filename, ImageFormat.Png);
             }
         }
@@ -190,19 +193,18 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 return 0.0;
             }
             double density;
-            switch(dispersalType) 
-            {
-            case DispersalProbabilityAlgorithm.PowerLaw:
-                if (alphaCoefficient <= 0.0) return 0.0;
-                density = (alphaCoefficient * alphaCoefficient) / (2.0 * Math.PI) * Math.Exp(-alphaCoefficient * distance);
-                break;
-            case DispersalProbabilityAlgorithm.NegativeExponent:
-                double softeningLength = 0.5 * cellLength;
-                double normalization = ((alphaCoefficient - 1.0) * (alphaCoefficient - 2.0)) / (2.0 * Math.PI * softeningLength * softeningLength);
-                density = normalization * Math.Pow(1.0 + distance / softeningLength, -alphaCoefficient);
-                break;
-            default:
-                throw new ArgumentException($"Dispersal type {dispersalType} not supported");
+            switch(dispersalType) {
+                case DispersalProbabilityAlgorithm.PowerLaw:
+                    if (alphaCoefficient <= 0.0) return 0.0;
+                    density = (alphaCoefficient * alphaCoefficient) / (2.0 * Math.PI) * Math.Exp(-alphaCoefficient * distance);
+                    break;
+                case DispersalProbabilityAlgorithm.NegativeExponent:
+                    double softeningLength = 0.5 * cellLength;
+                    double normalization = ((alphaCoefficient - 1.0) * (alphaCoefficient - 2.0)) / (2.0 * Math.PI * softeningLength * softeningLength);
+                    density = normalization * Math.Pow(1.0 + distance / softeningLength, -alphaCoefficient);
+                    break;
+                default:
+                    throw new ArgumentException($"Dispersal type {dispersalType} not supported");
             }
             double probability = density * cellArea;
             if (probability < 0.0) probability = 0.0;
@@ -221,12 +223,12 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 universalCohorts = value;
             }
         }
-        public static Dictionary<(int x, int y), double> IndexOffsetDispersalProbabilityDictionary
+        /* public static double[,] IndexOffsetDispersalProbabilityDictionary
         {
             get
             {
                 return indexOffsetDispersalProbabilityDictionary;
             }
-        }
+        } */
     }
 }
