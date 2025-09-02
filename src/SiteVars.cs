@@ -12,9 +12,11 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
 {    public static class SiteVars
     {
         private static ISiteVar<SiteCohorts> universalCohorts;
-        private static double[,] indexOffsetDispersalProbability;
+        private static int dispersalProbabilityMatrixWidth;
+        private static int dispersalProbabilityMatrixHeight;
+        private static double[] indexOffsetDispersalProbability;
         private static (int x, int y) landscapeDimensions;
-        private static int[,] resproutLifetime;
+        private static int[] resproutLifetime;
         private static (int x, int y) worstCaseMaximumDispersalCellDistance;
         //NOTE: no longer necessary to exist
         private static List<(int x, int y)> precalculatedDispersalDistanceOffsets;
@@ -37,18 +39,25 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 }
             };
             PlugIn.ModelCore.UI.WriteLine($"Generating dispersal lookup matrix for {LandscapeDimensions.x}x{LandscapeDimensions.y} landscape");
-            indexOffsetDispersalProbability = GenerateDispersalLookupMatrix(parameters.DispersalProbabilityAlgorithm, parameters.AlphaCoefficient, PlugIn.ModelCore.CellLength, worstCaseMaximumDispersalCellDistance.x, parameters.DispersalMaxDistance);
+            dispersalProbabilityMatrixWidth = worstCaseMaximumDispersalCellDistance.x + 1;
+            dispersalProbabilityMatrixHeight = (int)(worstCaseMaximumDispersalCellDistance.x * 0.7071067812) + 1;
+            indexOffsetDispersalProbability = GenerateDispersalProbabilityMatrix(parameters.DispersalProbabilityAlgorithm, parameters.AlphaCoefficient, PlugIn.ModelCore.CellLength, worstCaseMaximumDispersalCellDistance.x, parameters.DispersalMaxDistance);
             PlugIn.ModelCore.UI.WriteLine("Generating dispersal probability matrix image");
             GenerateProbabilityMatrixImage(indexOffsetDispersalProbability);
             //TODO: Initializes empty for now, but realistically the spinup cycle should add some sites to this
-            resproutLifetime = new int[LandscapeDimensions.x, LandscapeDimensions.y];
+            resproutLifetime = new int[LandscapeDimensions.x *LandscapeDimensions.y];
             //TODO: Add to input parameters
             resproutMaxLongevity = 5/* parameters.ResproutMaxLongevity */;
             //TODO: Add to input parameters
             resproutHalfLife = 2/* parameters.resproutHalfLife */;
             PlugIn.ModelCore.UI.WriteLine($"Finished generating dispersal lookup matrix for {LandscapeDimensions.x}x{LandscapeDimensions.y} landscape");
         }
-        public static int[,] ResproutLifetime {
+        public static int DispersalProbabilityMatrixWidth {
+            get {
+                return dispersalProbabilityMatrixWidth;
+            }
+        }
+        public static int[] ResproutLifetime {
             get {
                 return resproutLifetime;
             }
@@ -71,18 +80,28 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         public static void DecrementResproutLifetimes() {
             for (int x = 0; x < LandscapeDimensions.x; x++) {
                 for (int y = 0; y < LandscapeDimensions.y; y++) {
-                    if (resproutLifetime[x, y] > 0) resproutLifetime[x, y]--;
+                    int index = CalculateCoordinatesToIndex(x, y, LandscapeDimensions.x);
+                    if (resproutLifetime[index] > 0) resproutLifetime[index]--;
                 }
             }
         }
         public static void AddResproutLifetime(int x, int y) {
             //TODO: This is a placeholder, determine a better way to implement lifetime
             int lifetime = resproutMaxLongevity;
-            resproutLifetime[x, y] = Math.Min(resproutLifetime[x, y] + lifetime, resproutMaxLongevity);    
+            int index = CalculateCoordinatesToIndex(x, y, LandscapeDimensions.x);
+            resproutLifetime[index] = Math.Min(resproutLifetime[index] + lifetime, resproutMaxLongevity);    
         }
 
         public static (int x, int y) CalculateRelativeGridOffset(int x1, int y1, int x2, int y2) {
             return (x2 - x1, y2 - y1);
+        }
+
+        public static (int x, int y) CalculateIndexToCoordinates(int index, int width) {
+            return (index % width, index / width);
+        }
+
+        public static int CalculateCoordinatesToIndex(int x, int y, int width) {
+            return y * width + x;
         }
 
         private static double CalculateEuclideanDistance(int x1, int y1, int x2, int y2) {
@@ -90,8 +109,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         }
 
         //If given non-half-quadrate-canonicalized value, it will crash
-        public static double GetDispersalProbability(int canonicalized_x, int canonicalized_y) {
-            return indexOffsetDispersalProbability[canonicalized_x, canonicalized_y];
+        public static double GetDispersalProbability(int index) {
+            return indexOffsetDispersalProbability[index];
         }
 
         //Reduces memory usage of the dictionary by 87.5%
@@ -110,52 +129,41 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             return q1;
         }
 
-        private static double[,] GenerateDispersalLookupMatrix(DispersalProbabilityAlgorithm dispersalType, double alphaCoefficient, float cellLength, int maximumDispersalCellDistance, int maximumDispersalDistance) {
+        private static double[] GenerateDispersalProbabilityMatrix(DispersalProbabilityAlgorithm dispersalType, double alphaCoefficient, float cellLength, int maximumDispersalCellDistance, int maximumDispersalDistance) {
             Debug.Assert(cellLength > 0);
             float cellArea = cellLength * cellLength;
-            int maxRadius = maximumDispersalCellDistance + 1;
-            Console.WriteLine($"Max radius: {maxRadius}");
-            int maxY = (int)(maximumDispersalCellDistance * 0.7071067812) + 1;
-            double[,] dispersalLookupMatrix = new double[maxRadius, maxY];
+            Console.WriteLine($"Max radius: {dispersalProbabilityMatrixWidth}");
+            double[] dispersalLookupMatrix = new double[dispersalProbabilityMatrixWidth * dispersalProbabilityMatrixHeight];
             int dispersalLookupMatrixCount = 0;
-            for (int x = 0; x < maxRadius; x++) {
+            for (int x = 0; x < dispersalProbabilityMatrixWidth; x++) {
                 for (int y = 0; y <= x/* Math.Min(x, maxY) */; y++) {
                     double distance = CalculateEuclideanDistance(x, y, 0, 0) * cellLength;
                     //Console.WriteLine($"x: {x}, y: {y}, Distance: {distance}");
                     //if (distance > maximumDispersalDistance && distance < maximumDispersalDistance + 20) Console.WriteLine($"Distance {distance}");
                     if (distance > maximumDispersalDistance) continue;
                     double probability = CalculateDispersalProbability(dispersalType, distance, alphaCoefficient, cellLength, cellArea);
-                    dispersalLookupMatrix[x, y] = probability;
+                    dispersalLookupMatrix[CalculateCoordinatesToIndex(x, y, dispersalProbabilityMatrixWidth)] = probability;
                     dispersalLookupMatrixCount++;
                 }
             };
-            Console.WriteLine($"{dispersalLookupMatrix[0,0]}");
-            int rowZeroNonZero = 0;
-            for (int rx = 0; rx < maxRadius; rx++) if (dispersalLookupMatrix[rx, 0] != 0.0) rowZeroNonZero++;
-            int colZeroNonZero = 0;
-            for (int ry = 0; ry < maxY; ry++) if (dispersalLookupMatrix[0, ry] != 0.0) colZeroNonZero++;
-            Console.WriteLine($"Row0 non-zero count: {rowZeroNonZero}, Col0 non-zero count: {colZeroNonZero}");
-            
             Console.WriteLine($"Generated dispersal matrix with {dispersalLookupMatrixCount} entries");
             
             return dispersalLookupMatrix;
         }
 
-        private static void GenerateProbabilityMatrixImage(double[,] dispersalLookupMatrix) {
+        private static void GenerateProbabilityMatrixImage(double[] dispersalLookupMatrix) {
             int cellSize = 120;
-            int matrixWidth = dispersalLookupMatrix.GetLength(0);
-            int matrixHeight = dispersalLookupMatrix.GetLength(1);
-            while (cellSize * matrixWidth > MAX_IMAGE_SIZE || cellSize * matrixHeight > MAX_IMAGE_SIZE) {
+            while (cellSize * dispersalProbabilityMatrixWidth > MAX_IMAGE_SIZE || cellSize * dispersalProbabilityMatrixHeight > MAX_IMAGE_SIZE) {
                 cellSize--;
             }
-            int imageWidth = matrixWidth * cellSize;
-            int imageHeight = matrixHeight * cellSize;
+            int imageWidth = dispersalProbabilityMatrixWidth * cellSize;
+            int imageHeight = dispersalProbabilityMatrixHeight * cellSize;
             if (imageWidth <= 0 || imageHeight <= 0 || imageWidth > MAX_IMAGE_SIZE || imageHeight > MAX_IMAGE_SIZE) {
                 Console.WriteLine($"Skipping image generation - invalid dimensions: {imageWidth}x{imageHeight}");
                 return;
             }
             Console.WriteLine($"Image dimensions: {imageWidth}x{imageHeight}");
-            Console.WriteLine($"Matrix dimensions: {matrixWidth}x{matrixHeight}");
+            Console.WriteLine($"Matrix dimensions: {dispersalProbabilityMatrixWidth}x{dispersalProbabilityMatrixHeight}");
             using (Bitmap bitmap = new Bitmap(imageWidth, imageHeight))
             using (Graphics graphics = Graphics.FromImage(bitmap))
             {
@@ -167,9 +175,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     StringFormat stringFormat = new StringFormat();
                     stringFormat.Alignment = StringAlignment.Center;
                     stringFormat.LineAlignment = StringAlignment.Center;
-                    for (int gridY = 0; gridY < matrixHeight; gridY++) {
-                        for (int gridX = 0; gridX < matrixWidth; gridX++) {
-                            double probability = dispersalLookupMatrix[gridX, gridY];
+                    for (int gridY = 0; gridY < dispersalProbabilityMatrixHeight; gridY++) {
+                        for (int gridX = 0; gridX < dispersalProbabilityMatrixWidth; gridX++) {
+                            double probability = dispersalLookupMatrix[CalculateCoordinatesToIndex(gridX, gridY, dispersalProbabilityMatrixWidth)];
                             int pixelX = gridX * cellSize;
                             int pixelY = gridY * cellSize;
                             if (gridX == 0 && gridY == 0 || probability != 0.0) {
@@ -222,12 +230,5 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 universalCohorts = value;
             }
         }
-        /* public static double[,] IndexOffsetDispersalProbabilityDictionary
-        {
-            get
-            {
-                return indexOffsetDispersalProbabilityDictionary;
-            }
-        } */
     }
 }
