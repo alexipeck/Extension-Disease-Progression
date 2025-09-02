@@ -162,6 +162,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 graphics.Clear(Color.Black);
                 using (Font font = new Font("Arial", 12))
                 using (SolidBrush textBrush = new SolidBrush(Color.White))
+                using (Pen gridPen = new Pen(Color.DimGray, 1))
                 {
                     StringFormat stringFormat = new StringFormat();
                     stringFormat.Alignment = StringAlignment.Center;
@@ -169,9 +170,12 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     for (int gridY = 0; gridY < matrixHeight; gridY++) {
                         for (int gridX = 0; gridX < matrixWidth; gridX++) {
                             double probability = dispersalLookupMatrix[gridX, gridY];
-                            if (probability == 0.0) continue;
                             int pixelX = gridX * cellSize;
                             int pixelY = gridY * cellSize;
+                            if (gridX == 0 && gridY == 0 || probability != 0.0) {
+                                graphics.DrawRectangle(gridPen, pixelX, pixelY, cellSize, cellSize);
+                            }
+                            if (probability == 0.0) continue;
                             string probabilityText = probability.ToString("E2");
                             RectangleF cellRect = new RectangleF(pixelX, pixelY, cellSize, cellSize);
                             graphics.DrawString(probabilityText, font, textBrush, cellRect, stringFormat);
