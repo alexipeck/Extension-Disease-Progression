@@ -113,23 +113,28 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         private static double[,] GenerateDispersalLookupMatrix(DispersalProbabilityAlgorithm dispersalType, double alphaCoefficient, float cellLength, int maximumDispersalCellDistance, int maximumDispersalDistance) {
             Debug.Assert(cellLength > 0);
             float cellArea = cellLength * cellLength;
-            int maxRadius = maximumDispersalCellDistance;
+            int maxRadius = maximumDispersalCellDistance + 1;
             Console.WriteLine($"Max radius: {maxRadius}");
-            int maxY = (int)(maxRadius * 0.7071067812);
+            int maxY = (int)(maximumDispersalCellDistance * 0.7071067812) + 1;
             double[,] dispersalLookupMatrix = new double[maxRadius, maxY];
             int dispersalLookupMatrixCount = 0;
             for (int x = 0; x < maxRadius; x++) {
-                for (int y = 0; y < Math.Min(x, maxY); y++) {
-                    if (x == 0 && y == 0) continue;
+                for (int y = 0; y <= x/* Math.Min(x, maxY) */; y++) {
                     double distance = CalculateEuclideanDistance(x, y, 0, 0) * cellLength;
                     //Console.WriteLine($"x: {x}, y: {y}, Distance: {distance}");
-                    //if (distance > maximumDispersalDistance) Console.WriteLine($"Distance {distance}");
+                    //if (distance > maximumDispersalDistance && distance < maximumDispersalDistance + 20) Console.WriteLine($"Distance {distance}");
                     if (distance > maximumDispersalDistance) continue;
                     double probability = CalculateDispersalProbability(dispersalType, distance, alphaCoefficient, cellLength, cellArea);
                     dispersalLookupMatrix[x, y] = probability;
                     dispersalLookupMatrixCount++;
                 }
             };
+            Console.WriteLine($"{dispersalLookupMatrix[0,0]}");
+            int rowZeroNonZero = 0;
+            for (int rx = 0; rx < maxRadius; rx++) if (dispersalLookupMatrix[rx, 0] != 0.0) rowZeroNonZero++;
+            int colZeroNonZero = 0;
+            for (int ry = 0; ry < maxY; ry++) if (dispersalLookupMatrix[0, ry] != 0.0) colZeroNonZero++;
+            Console.WriteLine($"Row0 non-zero count: {rowZeroNonZero}, Col0 non-zero count: {colZeroNonZero}");
             
             Console.WriteLine($"Generated dispersal matrix with {dispersalLookupMatrixCount} entries");
             
@@ -138,63 +143,41 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
 
         private static void GenerateProbabilityMatrixImage(double[,] dispersalLookupMatrix) {
             int cellSize = 120;
-            while (cellSize * (worstCaseMaximumDispersalCellDistance.x + 1) > MAX_IMAGE_SIZE) {
+            int matrixWidth = dispersalLookupMatrix.GetLength(0);
+            int matrixHeight = dispersalLookupMatrix.GetLength(1);
+            while (cellSize * matrixWidth > MAX_IMAGE_SIZE || cellSize * matrixHeight > MAX_IMAGE_SIZE) {
                 cellSize--;
             }
-            
-            int matrixWidth = Math.Min(worstCaseMaximumDispersalCellDistance.x, MAX_IMAGE_SIZE / cellSize);
-            int matrixHeight = (int)(matrixWidth * 0.7071067812);
-            GenerateMatrixImage(dispersalLookupMatrix, matrixWidth, matrixHeight, cellSize);
-        }
-        
-        private static void GenerateMatrixImage(double[,] dispersalLookupMatrix, int matrixWidth, int matrixHeight, int cellSize) {
             int imageWidth = matrixWidth * cellSize;
-            //0.7071067812 is 1/1.4142135624 being half of pythagoras' constant
-            int imageHeight = (int)(imageWidth * 0.7071067812);
-            
+            int imageHeight = matrixHeight * cellSize;
             if (imageWidth <= 0 || imageHeight <= 0 || imageWidth > MAX_IMAGE_SIZE || imageHeight > MAX_IMAGE_SIZE) {
                 Console.WriteLine($"Skipping image generation - invalid dimensions: {imageWidth}x{imageHeight}");
                 return;
             }
-            
             Console.WriteLine($"Image dimensions: {imageWidth}x{imageHeight}");
             Console.WriteLine($"Matrix dimensions: {matrixWidth}x{matrixHeight}");
-            
             using (Bitmap bitmap = new Bitmap(imageWidth, imageHeight))
             using (Graphics graphics = Graphics.FromImage(bitmap))
             {
                 graphics.Clear(Color.Black);
-                
                 using (Font font = new Font("Arial", 12))
                 using (SolidBrush textBrush = new SolidBrush(Color.White))
                 {
+                    StringFormat stringFormat = new StringFormat();
+                    stringFormat.Alignment = StringAlignment.Center;
+                    stringFormat.LineAlignment = StringAlignment.Center;
                     for (int gridY = 0; gridY < matrixHeight; gridY++) {
                         for (int gridX = 0; gridX < matrixWidth; gridX++) {
-                            //Console.WriteLine($"gridX: {gridX}, gridY: {gridY}");
                             double probability = dispersalLookupMatrix[gridX, gridY];
-                            //Console.WriteLine($"probability: {probability}");
                             if (probability == 0.0) continue;
                             int pixelX = gridX * cellSize;
                             int pixelY = gridY * cellSize;
-                            
                             string probabilityText = probability.ToString("E2");
-                            /* if (probability == 0.0) {
-                                probabilityText = "0";
-                            } else if (probability < 0.00000001) {
-                                probabilityText = "~0";
-                            } else {
-                                probabilityText = probability.ToString("E2");
-                            } */
-                            
-                            SizeF textSize = graphics.MeasureString(probabilityText, font);
-                            float textX = pixelX + (cellSize - textSize.Width) / 2;
-                            float textY = pixelY + (cellSize - textSize.Height) / 2;
-                            
-                            graphics.DrawString(probabilityText, font, textBrush, textX, textY);
+                            RectangleF cellRect = new RectangleF(pixelX, pixelY, cellSize, cellSize);
+                            graphics.DrawString(probabilityText, font, textBrush, cellRect, stringFormat);
                         }
                     }
                 }
-                
                 string filename = $"canonicalized_dispersal_probability_matrix_radius_{worstCaseMaximumDispersalCellDistance}.png";
                 bitmap.Save(filename, ImageFormat.Png);
             }
