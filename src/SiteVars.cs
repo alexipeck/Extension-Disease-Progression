@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Linq;
+using System.IO;
 
 namespace Landis.Extension.Disturbance.DiseaseProgression
 {
@@ -220,6 +221,42 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             return dispersalLookupMatrix;
         }
 
+        private static double CalculateDispersalProbability(DispersalProbabilityAlgorithm dispersalType, double distance, double alphaCoefficient, float cellLength, float cellArea) {
+            if (distance == 0.0) {
+                return 0.0;
+            }
+            double density;
+            switch(dispersalType) {
+                case DispersalProbabilityAlgorithm.PowerLaw:
+                    if (alphaCoefficient <= 0.0) return 0.0;
+                    density = (alphaCoefficient * alphaCoefficient) / (2.0 * Math.PI) * Math.Exp(-alphaCoefficient * distance);
+                    break;
+                case DispersalProbabilityAlgorithm.NegativeExponent:
+                    double softeningLength = 0.5 * cellLength;
+                    double normalization = ((alphaCoefficient - 1.0) * (alphaCoefficient - 2.0)) / (2.0 * Math.PI * softeningLength * softeningLength);
+                    density = normalization * Math.Pow(1.0 + distance / softeningLength, -alphaCoefficient);
+                    break;
+                default:
+                    throw new ArgumentException($"Dispersal type {dispersalType} not supported");
+            }
+            double probability = density * cellArea;
+            if (probability < 0.0) probability = 0.0;
+            if (probability > 1.0) probability = 1.0;
+            return probability;
+        }
+
+        public static ISiteVar<SiteCohorts> Cohorts
+        {
+            get
+            {
+                return universalCohorts;
+            }
+            set
+            {
+                universalCohorts = value;
+            }
+        }
+
         private static void GenerateProbabilityMatrixImage(double[] dispersalLookupMatrix) {
             int cellSize = 120;
             while (cellSize * dispersalProbabilityMatrixWidth > MAX_IMAGE_SIZE || cellSize * dispersalProbabilityMatrixHeight > MAX_IMAGE_SIZE) {
@@ -264,40 +301,92 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
         }
 
-        private static double CalculateDispersalProbability(DispersalProbabilityAlgorithm dispersalType, double distance, double alphaCoefficient, float cellLength, float cellArea) {
-            if (distance == 0.0) {
-                return 0.0;
+        public static void GenerateSHIStateBitmap(string outputPath, double[] SHI) {
+            byte scaleFactor = 120;
+            while (scaleFactor * landscapeDimensions.x > MAX_IMAGE_SIZE || scaleFactor * landscapeDimensions.y > MAX_IMAGE_SIZE) {
+                scaleFactor--;
             }
-            double density;
-            switch(dispersalType) {
-                case DispersalProbabilityAlgorithm.PowerLaw:
-                    if (alphaCoefficient <= 0.0) return 0.0;
-                    density = (alphaCoefficient * alphaCoefficient) / (2.0 * Math.PI) * Math.Exp(-alphaCoefficient * distance);
-                    break;
-                case DispersalProbabilityAlgorithm.NegativeExponent:
-                    double softeningLength = 0.5 * cellLength;
-                    double normalization = ((alphaCoefficient - 1.0) * (alphaCoefficient - 2.0)) / (2.0 * Math.PI * softeningLength * softeningLength);
-                    density = normalization * Math.Pow(1.0 + distance / softeningLength, -alphaCoefficient);
-                    break;
-                default:
-                    throw new ArgumentException($"Dispersal type {dispersalType} not supported");
+            int imageWidth = landscapeDimensions.x * scaleFactor;
+            int imageHeight = landscapeDimensions.y * scaleFactor;
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
+            using (Bitmap bitmap = new Bitmap(imageWidth, imageHeight))
+            using (Graphics graphics = Graphics.FromImage(bitmap))
+            {
+                graphics.Clear(Color.Black);
+                using (Font font = new Font("Arial", 12))
+                using (SolidBrush textBrush = new SolidBrush(Color.White))
+                using (Pen gridPen = new Pen(Color.DimGray, 1))
+                {
+                    StringFormat stringFormat = new StringFormat();
+                    stringFormat.Alignment = StringAlignment.Center;
+                    stringFormat.LineAlignment = StringAlignment.Center;
+                    for (int gridY = 0; gridY < landscapeDimensions.y; gridY++) {
+                        for (int gridX = 0; gridX < landscapeDimensions.x; gridX++) {
+                            double value = SHI[CalculateCoordinatesToIndex(gridX, gridY, landscapeDimensions.x)];
+                            int pixelX = gridX * scaleFactor;
+                            int pixelY = gridY * scaleFactor;
+                            graphics.DrawRectangle(gridPen, pixelX, pixelY, scaleFactor, scaleFactor);
+                            string text = value.ToString(/* "E2" */);
+                            RectangleF cellRect = new RectangleF(pixelX, pixelY, scaleFactor, scaleFactor);
+                            graphics.DrawString(text, font, textBrush, cellRect, stringFormat);
+                        }
+                    }
+                }
+                bitmap.Save(outputPath, ImageFormat.Png);
             }
-            double probability = density * cellArea;
-            if (probability < 0.0) probability = 0.0;
-            if (probability > 1.0) probability = 1.0;
-            return probability;
         }
-
-        public static ISiteVar<SiteCohorts> Cohorts
-        {
-            get
-            {
-                return universalCohorts;
+        public static void GenerateInfectionStateBitmap(string outputPath, List<(int x, int y)> healthySitesList, List<(int x, int y)> infectedSitesList, List<(int x, int y)> ignoredSitesList) {
+            byte scaleFactor = 10;
+            while (scaleFactor * landscapeDimensions.x > MAX_IMAGE_SIZE || scaleFactor * landscapeDimensions.y > MAX_IMAGE_SIZE) {
+                scaleFactor--;
             }
-            set
-            {
-                universalCohorts = value;
+            if (scaleFactor <= 0) {
+                Console.WriteLine($"Skipping infection image generation - site too large to generate image");
+                return;
             }
+            int imageWidth = landscapeDimensions.x * scaleFactor;
+            int imageHeight = landscapeDimensions.y * scaleFactor;
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
+            Bitmap bitmap = new Bitmap(imageWidth, imageHeight, PixelFormat.Format32bppArgb);
+            
+            Color healthyColor = Color.Green;
+            Color infectedColor = Color.Red;
+            Color ignoredColor = Color.Blue;
+            foreach ((int x, int y) in healthySitesList) {
+                int actualX = (x - 1) * scaleFactor;
+                int actualY = (y - 1) * scaleFactor;
+                for (int i = 0; i < scaleFactor; i++) {
+                    for (int j = 0; j < scaleFactor; j++) {
+                        int pixelX = actualX + i;
+                        int pixelY = actualY + j;
+                        bitmap.SetPixel(pixelX, pixelY, healthyColor);
+                    }
+                }
+            }
+            foreach ((int x, int y) in infectedSitesList) {
+                int actualX = (x - 1) * scaleFactor;
+                int actualY = (y - 1) * scaleFactor;
+                for (int i = 0; i < scaleFactor; i++) {
+                    for (int j = 0; j < scaleFactor; j++) {
+                        int pixelX = actualX + i;
+                        int pixelY = actualY + j;
+                        bitmap.SetPixel(pixelX, pixelY, infectedColor);
+                    }
+                }
+            }
+            foreach ((int x, int y) in ignoredSitesList) {
+                int actualX = (x - 1) * scaleFactor;
+                int actualY = (y - 1) * scaleFactor;
+                for (int i = 0; i < scaleFactor; i++) {
+                    for (int j = 0; j < scaleFactor; j++) {
+                        int pixelX = actualX + i;
+                        int pixelY = actualY + j;
+                        bitmap.SetPixel(pixelX, pixelY, ignoredColor);
+                    }
+                }
+            }
+            
+            bitmap.Save(outputPath, ImageFormat.Png);
         }
     }
 }

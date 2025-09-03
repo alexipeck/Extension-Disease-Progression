@@ -45,9 +45,11 @@ try {
     cd $ProjectDir\src\
 }
 
-Write-Output "Turning image sequence into video..."
+Write-Output "Turning image sequences into videos..."
 ffmpeg -y -framerate 10 -i "$LandisExecutionDir/infection_timeline/infection_state_%d.png" -c:v libx264 -pix_fmt yuv420p "$LandisExecutionDir/infection_timeline.mp4"
 Write-Output "Video saved to: $LandisExecutionDir/infection_timeline.mp4"
+ffmpeg -y -framerate 10 -i "$LandisExecutionDir/shi_timeline/shi_state_%d.png" -c:v libx264 -pix_fmt yuv420p "$LandisExecutionDir/shi_timeline.mp4"
+Write-Output "Video saved to: $LandisExecutionDir/shi_timeline.mp4"
 
 Write-Output "Creating filtered console output..."
 $consoleOutputPath = "$LandisExecutionDir\console-output.txt"
