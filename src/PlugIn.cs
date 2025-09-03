@@ -73,27 +73,24 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         public override void Run()
         {
             ModelCore.UI.WriteLine("Running disease progression");
-            ////////
-            //DEBUG PARAMETERS
+            //////// DEBUG PARAMETERS
             bool debugOutputTransitions = false;
             bool debugDumpSiteInformation = false;
+            //TODO: Image generation gets started in another thread
+            //      I need a boolean check to ensure that the thread has stopped
+            //      The thread is needed as is can save something like 7 steps per timestep
             bool debugInfectionStatusOutput = true;
-            bool debugPerformTiming = true;
             bool debugOutputInfectionStateCounts = true;
             byte debugInfectionStatusOutputScaleFactor = 10;
             ////////
+            
             int landscapeX = SiteVars.LandscapeDimensions.x;
             int landscapeY = SiteVars.LandscapeDimensions.y;
             int dispersalProbabilityMatrixWidth = SiteVars.DispersalProbabilityMatrixWidth;
             IEnumerable<ActiveSite> sites = ModelCore.Landscape.ActiveSites;
+            (int x, int y) worstCaseMaximumUniformDispersalDistance = SiteVars.GetWorstCaseMaximumUniformDispersalDistance();
 
-            // Species string to ISpecies lookup
-            Dictionary<string, ISpecies> speciesNameToISpecies = new Dictionary<string, ISpecies>();
-            foreach (var species in ModelCore.Species) {
-                speciesNameToISpecies[species.Name] = species;
-            }
-
-            //Resprouting
+            ////////Resprouting TODO: REWORK
             int[] resproutLifetime = SiteVars.ResproutLifetime;
             bool[] willResprout = new bool[landscapeX * landscapeY];
             for (int x = 0; x < landscapeX; x++) {
@@ -107,28 +104,30 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 }
             }
             SiteVars.DecrementResproutLifetimes();
-            ISpecies derivedHealthySpecies = speciesNameToISpecies[parameters.DerivedHealthySpecies];
+            ISpecies derivedHealthySpecies = SiteVars.GetISpecies(parameters.DerivedHealthySpecies);
             foreach (ActiveSite site in sites) {
                 Location siteLocation = site.Location;
                 if (!willResprout[SiteVars.CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX)]) continue;
                 Reproduction.AddNewCohort(derivedHealthySpecies, site, "resprout", 0);
             }
-            //
+            ////////
 
-            (int x, int y) worstCaseMaximumUniformDispersalDistance = SiteVars.GetWorstCaseMaximumUniformDispersalDistance();
-            List<(int x, int y)> precalculatedDispersalDistanceOffsets = SiteVars.PrecalculatedDispersalDistanceOffsets;
-            
             Stopwatch stopwatch = new Stopwatch();
-            if (debugPerformTiming) {
-                stopwatch.Start();
-            }
+            stopwatch.Start();
             
-
+            double[] SHI = new double[landscapeX * landscapeY];
             bool[] sitesForProportioning = new bool[landscapeX * landscapeY];
             List<(int x, int y)> healthySitesList = new List<(int x, int y)>();
             List<(int x, int y)> infectedSitesList = new List<(int x, int y)>();
             List<(int x, int y)> ignoredSitesList = new List<(int x, int y)>();
 
+            ////////calculate SHI
+            foreach (ActiveSite site in sites) {
+                Location siteLocation = site.Location;
+                SHI[SiteVars.CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX)] = (int)SiteVars.CalculateSiteHostIndex(site);
+            }
+            ////////
+            
             
             // infection detection & adjustment pass
             foreach (ActiveSite site in sites) {
@@ -152,9 +151,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 }
             }
 
-            if (debugPerformTiming) {
+            /* if (debugPerformTiming) {
                 ModelCore.UI.WriteLine($"Infection detection finished: {stopwatch.ElapsedMilliseconds} ms");
-            }
+            } */
 
             if (debugInfectionStatusOutput) {
                 List<(int x, int y)> healthySitesListCopy = new List<(int x, int y)>(healthySitesList);
@@ -163,9 +162,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 
                 Task.Run(() => {
                     Stopwatch outputStopwatch = new Stopwatch();
-                    if (debugPerformTiming) {
-                        outputStopwatch.Start();
-                    }
+                    outputStopwatch.Start();
                     try {
                         string outputPath = $"./infection_timeline/infection_state_{modelCore.CurrentTime}.png";
                         System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(outputPath));
@@ -215,14 +212,12 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                         ModelCore.UI.WriteLine($"Debug bitmap generation failed: {ex.Message}");
                         throw;
                     }
-                    if (debugPerformTiming) {
-                        outputStopwatch.Stop();
-                        ModelCore.UI.WriteLine($"      Finished outputting infection state: {outputStopwatch.ElapsedMilliseconds} ms");
-                    }
+                    outputStopwatch.Stop();
+                    ModelCore.UI.WriteLine($"      Finished outputting infection state: {outputStopwatch.ElapsedMilliseconds} ms");
                 });
             }
             
-            int numberOfInfectedSitesBeforeDispersal = infectedSitesList.Count;
+            //int numberOfInfectedSitesBeforeDispersal = infectedSitesList.Count;
 
             // compute relative site positions
             // compute cumulative probability of infection
@@ -263,12 +258,10 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 ModelCore.UI.WriteLine($"Healthy sites: {healthySitesList.Count}");
                 ModelCore.UI.WriteLine($"Infected sites: {infectedSitesList.Count}");
                 ModelCore.UI.WriteLine($"Ignored sites: {ignoredSitesList.Count}");
-                ModelCore.UI.WriteLine($"Newly infected sites: {infectedSitesList.Count - numberOfInfectedSitesBeforeDispersal}");
+                ModelCore.UI.WriteLine($"Newly infected sites: {infectedSitesList.Count - infectedSitesList.Count}");
             }
             healthySitesList.Clear();
-            if (debugPerformTiming) {
-                ModelCore.UI.WriteLine($"Finished determining which sites are newly infected: {stopwatch.ElapsedMilliseconds} ms");
-            }
+            ModelCore.UI.WriteLine($"Finished determining which sites are newly infected: {stopwatch.ElapsedMilliseconds} ms");
             ///////////////////
             
             Dictionary<ISpecies, Dictionary<ushort, int>> newSiteCohortsDictionary = new Dictionary<ISpecies, Dictionary<ushort, int>>();
@@ -347,7 +340,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                                     SiteVars.AddResproutLifetime(siteLocation.Row - 1, siteLocation.Column - 1);
                                     continue; //short-circuit
                                 }
-                                ISpecies targetSpecies = speciesNameToISpecies[species];
+                                ISpecies targetSpecies = SiteVars.GetISpecies(species);
 
                                 //push biomass to target species cohort
                                 if (!newSiteCohortsDictionary.ContainsKey(targetSpecies)) {
@@ -401,10 +394,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     data.Value.Clear();
                 }
             }
-            if (debugPerformTiming) {
-                stopwatch.Stop();
-                ModelCore.UI.WriteLine($"Finished proportioning all sites: {stopwatch.ElapsedMilliseconds} ms");
-            }
+            stopwatch.Stop();
+            ModelCore.UI.WriteLine($"Finished proportioning all sites: {stopwatch.ElapsedMilliseconds} ms");
         }
 
 

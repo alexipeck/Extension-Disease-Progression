@@ -1,14 +1,39 @@
 using System.Collections.Generic;
 using System;
 using Landis.Utilities;
+using Landis.Core;
 
 namespace Landis.Extension.Disturbance.DiseaseProgression
 {
+    public readonly struct HostIndexEntry {
+        public ushort Age { get; }
+        public byte Score { get; }
+        public HostIndexEntry(ushort age, byte score) {
+            Age = age;
+            Score = score;
+        }
+        public void Deconstruct(out ushort age, out byte score) {
+            age = Age;
+            score = Score;
+        }
+    }
+    public readonly struct HostIndex {
+        public HostIndexEntry Low { get; }
+        public HostIndexEntry Medium { get; }
+        public HostIndexEntry High { get; }
+        public HostIndex(HostIndexEntry low, HostIndexEntry medium, HostIndexEntry high) {
+            Low = low;
+            Medium = medium;
+            High = high;
+        }
+    }
     public enum DispersalProbabilityAlgorithm { PowerLaw, NegativeExponent };
+    public enum SHIMode { Mean, Max };
     public interface IInputParameters
     {
         int Timestep {get;set;}
         Dictionary<string, List<(string, double)>> SpeciesTransitionMatrix { get; set; }
+        Dictionary<ISpecies, HostIndex> SpeciesHostIndex { get; set; }
         List<(string, double)> GetTransitionMatrixDistribution(string speciesName);
         bool TransitionMatrixContainsSpecies(string speciesName);
         string DerivedHealthySpecies { get; set; }
@@ -21,6 +46,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
     {
         private int timestep;
         private Dictionary<string, List<(string, double)>> speciesTransitionMatrix;
+        private Dictionary<ISpecies, HostIndex> speciesHostIndex;
         private string derivedHealthySpecies;
         private DispersalProbabilityAlgorithm dispersalType;
         private int dispersalMaxDistance;
@@ -32,6 +58,15 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
             set {
                 speciesTransitionMatrix = value;
+            }
+        }
+        public Dictionary<ISpecies, HostIndex> SpeciesHostIndex
+        {
+            get {
+                return speciesHostIndex;
+            }
+            set {
+                speciesHostIndex = value;
             }
         }
 

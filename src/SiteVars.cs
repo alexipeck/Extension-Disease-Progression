@@ -9,9 +9,11 @@ using System.Drawing.Imaging;
 using System.Linq;
 
 namespace Landis.Extension.Disturbance.DiseaseProgression
-{    public static class SiteVars
+{
+    public static class SiteVars
     {
         private static ISiteVar<SiteCohorts> universalCohorts;
+        private static Dictionary<ISpecies, HostIndex> speciesHostIndex;
         private static int dispersalProbabilityMatrixWidth;
         private static int dispersalProbabilityMatrixHeight;
         private static double[] indexOffsetDispersalProbability;
@@ -22,12 +24,17 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         private static List<(int x, int y)> precalculatedDispersalDistanceOffsets;
         //TODO: Add to input parameters
         private static int resproutMaxLongevity;
-        //TODO: Add to input parameters
-        private static int resproutHalfLife;
         private const int MAX_IMAGE_SIZE = 16384;
+        private static readonly Dictionary<string, ISpecies> speciesNameToISpecies = new Dictionary<string, ISpecies>();
+        private static SHIMode siteHostIndexMode = SHIMode.Mean;
         public static void Initialize(ICore modelCore, IInputParameters parameters) {
             universalCohorts = PlugIn.ModelCore.GetSiteVar<SiteCohorts>("Succession.UniversalCohorts");
             landscapeDimensions = (PlugIn.ModelCore.Landscape.Dimensions.Columns, PlugIn.ModelCore.Landscape.Dimensions.Rows);
+            speciesHostIndex = parameters.SpeciesHostIndex;
+            foreach (var species in PlugIn.ModelCore.Species) {
+                speciesNameToISpecies[species.Name] = species;
+            }
+
             int worstCaseMaximumDispersalCellDistanceX = (int)Math.Ceiling(parameters.DispersalMaxDistance / PlugIn.ModelCore.CellLength);
             worstCaseMaximumDispersalCellDistance = (worstCaseMaximumDispersalCellDistanceX, (int)(worstCaseMaximumDispersalCellDistanceX * 0.7071067812) + 1);
             
@@ -49,8 +56,18 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             //TODO: Add to input parameters
             resproutMaxLongevity = 5/* parameters.ResproutMaxLongevity */;
             //TODO: Add to input parameters
-            resproutHalfLife = 2/* parameters.resproutHalfLife */;
             PlugIn.ModelCore.UI.WriteLine($"Finished generating dispersal lookup matrix for {LandscapeDimensions.x}x{LandscapeDimensions.y} landscape");
+        }
+        public static SHIMode SHIMode {
+            get {
+                return siteHostIndexMode;
+            }
+            set {
+                siteHostIndexMode = value;
+            }
+        }
+        public static ISpecies GetISpecies(string speciesName) {
+            return speciesNameToISpecies[speciesName];
         }
         public static int DispersalProbabilityMatrixWidth {
             get {
@@ -107,8 +124,60 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         private static double CalculateEuclideanDistance(int x1, int y1, int x2, int y2) {
             return Math.Sqrt(Math.Pow(x2 - x1, 2) + Math.Pow(y2 - y1, 2));
         }
+        /* public static double CalculateTransmissionAndWeatherIndex() {
 
-        //If given non-half-quadrate-canonicalized value, it will crash
+        } */
+        public static int CalculateHostIndex(HostIndex hostIndex, ushort age) {
+            if (age >= hostIndex.High.Age)
+                return hostIndex.High.Score;
+            else if (age >= hostIndex.Medium.Age)
+                return hostIndex.Medium.Score;
+            else if (age >= hostIndex.Low.Age)
+                return hostIndex.Low.Score;
+            return 0;
+        }
+        public static double CalculateSiteHostIndexMean(ActiveSite site) {
+            int divisor = 0;
+            double sum = 0.0;
+            foreach (ISpeciesCohorts speciesCohorts in universalCohorts[site]) {
+                if (!speciesHostIndex.TryGetValue(speciesCohorts.Species, out HostIndex hostIndex)) {
+                    continue;
+                }
+                ushort oldest = Util.GetMaxAge(speciesCohorts);
+                if (oldest == 0) continue;
+                sum += CalculateHostIndex(hostIndex, oldest);
+                divisor++;
+            }
+            
+            if (divisor == 0) return 0.0f;
+            return sum / divisor;
+        }
+        public static double CalculateSiteHostIndexMax(ActiveSite site) {
+            double maxScore = 0.0;
+            foreach (ISpeciesCohorts speciesCohorts in universalCohorts[site]) {
+                if (!speciesHostIndex.TryGetValue(speciesCohorts.Species, out HostIndex hostIndex)) {
+                    continue;
+                }
+                ushort oldest = Util.GetMaxAge(universalCohorts[site][speciesCohorts.Species]);
+                if (oldest == 0) continue;
+                int hostCompetency = CalculateHostIndex(hostIndex, oldest);
+                if (hostCompetency > maxScore) maxScore = hostCompetency;
+            }
+            return maxScore;
+        }
+
+        public static double CalculateSiteHostIndex(ActiveSite site) {
+            switch (siteHostIndexMode) {
+                case SHIMode.Mean:
+                    return CalculateSiteHostIndexMean(site);
+                case SHIMode.Max:
+                    return CalculateSiteHostIndexMax(site);
+                default:
+                    throw new Exception($"Invalid SHI mode: {siteHostIndexMode}");
+            }
+        }
+
+        //If given non-half-quadrate-canonicalized index, it will crash
         public static double GetDispersalProbability(int index) {
             return indexOffsetDispersalProbability[index];
         }

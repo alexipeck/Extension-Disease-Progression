@@ -10,12 +10,12 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
     /// A parser that reads biomass succession parameters from text input.
     /// </summary>
     public class InputParametersParser
-        : Landis.Utilities.TextParser<IInputParameters>
+        : Utilities.TextParser<IInputParameters>
     {
         public static class Names
         {
+            public const string SpeciesHostIndex = "SpeciesHostIndex";
             public const string SpeciesMatrix = "SpeciesMatrix";
-
         }
         private ISpeciesDataset speciesDataset;
         public InputParametersParser()
@@ -37,6 +37,92 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             ////////////////////
             // species matrix
 
+            PlugIn.ModelCore.UI.WriteLine("Started reading species competency file");
+            InputVar<string> speciesHostIndexFile = new InputVar<string>(Names.SpeciesHostIndex);
+            ReadVar(speciesHostIndexFile);
+            //Import CSV data here
+            int lineNum = -1;
+            var speciesHostIndex = new Dictionary<ISpecies, HostIndex>();
+            foreach (string line in System.IO.File.ReadLines(speciesHostIndexFile.Value)) {
+                lineNum++;
+                string trimmed = line.Trim();
+                if (string.IsNullOrEmpty(trimmed)) continue;
+                PlugIn.ModelCore.UI.WriteLine($"Processing line {lineNum}: '{trimmed}'");
+                string[] columns = trimmed.Split(',');
+                if (columns.Length != 7) throw new InputValueException(trimmed, "Invalid number of columns in species competency file");
+                if (lineNum == 0) {
+                    PlugIn.ModelCore.UI.WriteLine($"Columns: {string.Join(", ", columns)}");
+                    if (
+                        columns[0].ToLower() != "species" ||
+                        columns[1].ToLower() != "lowage" ||
+                        columns[2].ToLower() != "lowscore" ||
+                        columns[3].ToLower() != "mediumage" ||
+                        columns[4].ToLower() != "mediumscore" ||
+                        columns[5].ToLower() != "highage" ||
+                        columns[6].ToLower() != "highscore"
+                    ) throw new InputValueException(trimmed, "Invalid field");
+                    continue;
+                }
+
+                //parse species
+                ISpecies species = null;
+                foreach (var species_ in speciesDataset) {
+                    if (species_.Name == columns[0]) {
+                        species = species_;
+                        break;
+                    }
+                }
+                if (species == null) {
+                    throw new InputValueException(columns[0], $"Species specified on line {lineNum} of SpeciesMatrix file does not exist in scenario species list.");
+                }
+
+                //parse numbers
+                if (!ushort.TryParse(columns[1], out ushort lowAge)) {
+                    throw new InputValueException(columns[1], $"Invalid low age value '{columns[1]}' on line {lineNum}, column 2.");
+                }
+                if (!byte.TryParse(columns[2], out byte lowScore)) {
+                    throw new InputValueException(columns[2], $"Invalid low score value '{columns[2]}' on line {lineNum}, column 3.");
+                }
+                if (!ushort.TryParse(columns[3], out ushort mediumAge)) {
+                    throw new InputValueException(columns[3], $"Invalid medium age value '{columns[3]}' on line {lineNum}, column 4.");
+                }
+                if (!byte.TryParse(columns[4], out byte mediumScore)) {
+                    throw new InputValueException(columns[4], $"Invalid medium score value '{columns[4]}' on line {lineNum}, column 5.");
+                }
+                if (!ushort.TryParse(columns[5], out ushort highAge)) {
+                    throw new InputValueException(columns[5], $"Invalid high age value '{columns[5]}' on line {lineNum}, column 6.");
+                }
+                if (!byte.TryParse(columns[6], out byte highScore)) {
+                    throw new InputValueException(columns[6], $"Invalid high score value '{columns[6]}' on line {lineNum}, column 7.");
+                }
+                if (lowScore > 10) {
+                    throw new InputValueException(columns[2], $"Low score value '{columns[2]}' on line {lineNum}, column 3 must be 10 or less.");
+                }
+                if (mediumScore > 10) {
+                    throw new InputValueException(columns[4], $"Medium score value '{columns[4]}' on line {lineNum}, column 5 must be 10 or less.");
+                }
+                if (highScore > 10) {
+                    throw new InputValueException(columns[6], $"High score value '{columns[6]}' on line {lineNum}, column 7 must be 10 or less.");
+                }
+                if (lowAge >= 0 && mediumAge >= 0 && lowAge >= mediumAge) {
+                    throw new InputValueException(trimmed, $"Age values on line {lineNum} must be in ascending order: low < medium (when both low and medium are enabled).");
+                }
+                if (mediumAge >= 0 && highAge >= 0 && mediumAge >= highAge) {
+                    throw new InputValueException(trimmed, $"Age values on line {lineNum} must be in ascending order: medium < high (when both medium and high are enabled).");
+                }
+                if (lowAge >= 0 && highAge >= 0 && lowAge >= highAge) {
+                    throw new InputValueException(trimmed, $"Age values on line {lineNum} must be in ascending order: low < high (when both low and high are enabled).");
+                }
+                PlugIn.ModelCore.UI.WriteLine($"Adding species {species.Name} to species competency with low age {lowAge}, low score {lowScore}, medium age {mediumAge}, medium score {mediumScore}, high age {highAge}, high score {highScore}");
+                speciesHostIndex[species] = new HostIndex(
+                    new HostIndexEntry(lowAge, lowScore),
+                    new HostIndexEntry(mediumAge, mediumScore),
+                    new HostIndexEntry(highAge, highScore)
+                );
+            }
+            parameters.SpeciesHostIndex = speciesHostIndex;
+            PlugIn.ModelCore.UI.WriteLine("Finished reading species competency file");
+
             // read file
             PlugIn.ModelCore.UI.WriteLine("Started reading species matrix file");
             InputVar<string> speciesMatrixFile = new InputVar<string>(Names.SpeciesMatrix);
@@ -45,19 +131,19 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             // dynamically sized matrix ingestion
             var speciesOrderList = new List<string>();
             var speciesTransitionMatrix = new Dictionary<string, List<(string, double)>>();
-            int lineNum = 0;
+            lineNum = -1;
             List<string> columnHeaders = null;
             
-            foreach (var line in System.IO.File.ReadLines(speciesMatrixFile.Value)) {
+            foreach (string line in System.IO.File.ReadLines(speciesMatrixFile.Value)) {
                 lineNum++;
-                var trimmed = line.Trim();
+                string trimmed = line.Trim();
                 if (string.IsNullOrEmpty(trimmed)) continue;
                 PlugIn.ModelCore.UI.WriteLine($"Processing line {lineNum}: {trimmed}");
                 
                 var columns = trimmed.Split(',');
                 PlugIn.ModelCore.UI.WriteLine($"Columns: {string.Join(", ", columns)}");
                 
-                if (lineNum == 1) {
+                if (lineNum == 0) {
                     columnHeaders = new List<string>(columns);
                     if (columnHeaders.Count < 3)
                     {
