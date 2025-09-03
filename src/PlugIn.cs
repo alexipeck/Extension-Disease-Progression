@@ -128,19 +128,20 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             
             double[] SHICopy = new double[SHI.Length];
             Array.Copy(SHI, SHICopy, SHI.Length);
-            Stopwatch shiOutputStopwatch = new Stopwatch();
-            shiOutputStopwatch.Start();
-            try {
-                string outputPath = $"./shi_timeline/shi_state_{modelCore.CurrentTime}.png";
-                SiteVars.GenerateSHIStateBitmap(outputPath, SHICopy);
-            }
-            catch (Exception ex) {
-                ModelCore.UI.WriteLine($"Debug bitmap generation failed: {ex.Message}");
-                throw;
-            }
-            shiOutputStopwatch.Stop();
-            ModelCore.UI.WriteLine($"      Finished outputting SHI state: {shiOutputStopwatch.ElapsedMilliseconds} ms");
-
+            Task.Run(() => {
+                Stopwatch shiOutputStopwatch = new Stopwatch();
+                shiOutputStopwatch.Start();
+                try {
+                    string outputPath = $"./shi_timeline/shi_state_{modelCore.CurrentTime}.png";
+                    SiteVars.GenerateSHIStateBitmap(outputPath, SHICopy);
+                }
+                catch (Exception ex) {
+                    ModelCore.UI.WriteLine($"Debug bitmap generation failed: {ex.Message}");
+                    throw;
+                }
+                shiOutputStopwatch.Stop();
+                ModelCore.UI.WriteLine($"      Finished outputting SHI state: {shiOutputStopwatch.ElapsedMilliseconds} ms");
+            });
             ////////
             
             
@@ -175,18 +176,20 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 List<(int x, int y)> infectedSitesListCopy = new List<(int x, int y)>(infectedSitesList);
                 List<(int x, int y)> ignoredSitesListCopy = new List<(int x, int y)>(ignoredSitesList);
                 
-                Stopwatch outputStopwatch = new Stopwatch();
-                outputStopwatch.Start();
-                try {
-                    string outputPath = $"./infection_timeline/infection_state_{modelCore.CurrentTime}.png";
-                    SiteVars.GenerateInfectionStateBitmap(outputPath, healthySitesListCopy, infectedSitesListCopy, ignoredSitesListCopy);
-                }
-                catch (Exception ex) {
-                    ModelCore.UI.WriteLine($"Debug bitmap generation failed: {ex.Message}");
-                    throw;
-                }
-                outputStopwatch.Stop();
-                ModelCore.UI.WriteLine($"      Finished outputting infection state: {outputStopwatch.ElapsedMilliseconds} ms");
+                Task.Run(() => {
+                    Stopwatch outputStopwatch = new Stopwatch();
+                    outputStopwatch.Start();
+                    try {
+                        string outputPath = $"./infection_timeline/infection_state_{modelCore.CurrentTime}.png";
+                        SiteVars.GenerateInfectionStateBitmap(outputPath, healthySitesListCopy, infectedSitesListCopy, ignoredSitesListCopy);
+                    }
+                    catch (Exception ex) {
+                        ModelCore.UI.WriteLine($"Debug bitmap generation failed: {ex.Message}");
+                        throw;
+                    }
+                    outputStopwatch.Stop();
+                    ModelCore.UI.WriteLine($"      Finished outputting infection state: {outputStopwatch.ElapsedMilliseconds} ms");
+                });
             }
             
             //int numberOfInfectedSitesBeforeDispersal = infectedSitesList.Count;
