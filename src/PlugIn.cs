@@ -144,6 +144,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             });
             ////////
             
+            double SHISum = SHI.Sum();
             
             // infection detection & adjustment pass
             foreach (ActiveSite site in sites) {
