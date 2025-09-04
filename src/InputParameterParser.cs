@@ -34,6 +34,13 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             InputVar<int> timestep = new InputVar<int>("Timestep");
             ReadVar(timestep);
             parameters.Timestep = timestep.Value;
+
+            Dictionary<string, ISpecies> speciesNameToISpecies = new Dictionary<string, ISpecies>();
+            foreach (var species in PlugIn.ModelCore.Species) {
+                speciesNameToISpecies[species.Name] = species;
+            }
+            speciesNameToISpecies["DEAD"] = null;
+
             ////////////////////
             // species matrix
 
@@ -65,15 +72,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 }
 
                 //parse species
-                ISpecies species = null;
-                foreach (var species_ in speciesDataset) {
-                    if (species_.Name == columns[0]) {
-                        species = species_;
-                        break;
-                    }
-                }
-                if (species == null) {
-                    throw new InputValueException(columns[0], $"Species specified on line {lineNum} of SpeciesMatrix file does not exist in scenario species list.");
+                if (!speciesNameToISpecies.TryGetValue(columns[0], out ISpecies species)) {
+                    throw new InputValueException(columns[0], $"Species '{columns[0]}' on line {lineNum} of SpeciesMatrix file does not exist in scenario species list.1");
                 }
 
                 //parse numbers
@@ -129,8 +129,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             ReadVar(speciesMatrixFile);
             
             // dynamically sized matrix ingestion
-            var speciesOrderList = new List<string>();
-            var speciesTransitionMatrix = new Dictionary<string, List<(string, double)>>();
+            List<ISpecies> speciesOrderList = new List<ISpecies>();
+            Dictionary<ISpecies, List<(ISpecies, double)>> speciesTransitionMatrix = new Dictionary<ISpecies, List<(ISpecies, double)>>();
             lineNum = -1;
             List<string> columnHeaders = null;
             
@@ -140,7 +140,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 if (string.IsNullOrEmpty(trimmed)) continue;
                 PlugIn.ModelCore.UI.WriteLine($"Processing line {lineNum}: {trimmed}");
                 
-                var columns = trimmed.Split(',');
+                string[] columns = trimmed.Split(',');
                 PlugIn.ModelCore.UI.WriteLine($"Columns: {string.Join(", ", columns)}");
                 
                 if (lineNum == 0) {
@@ -155,22 +155,13 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     }
                     continue;
                 }
-                
-                var sourceSpecies = columns[0];
-                var found = false;
-                foreach (var species in speciesDataset) {
-                    if (species.Name == sourceSpecies)
-                    {
-                        found = true;
-                        break;
-                    }
-                }
-                if (!found) {
-                    throw new InputValueException(sourceSpecies, $"Species '{sourceSpecies}' on line {lineNum} of SpeciesMatrix file does not exist in scenario species list.");
+
+                if (!speciesNameToISpecies.TryGetValue(columns[0], out ISpecies sourceSpecies)) {
+                    throw new InputValueException(columns[0], $"Species '{columns[0]}' on line {lineNum} of SpeciesMatrix file does not exist in scenario species list.2");
                 }
                 
                 speciesOrderList.Add(sourceSpecies);
-                speciesTransitionMatrix[sourceSpecies] = new List<(string, double)>();
+                speciesTransitionMatrix[sourceSpecies] = new List<(ISpecies, double)>();
                 
                 for (int i = 1; i < columns.Length; i++) {
                     if (!double.TryParse(columns[i], out double proportion)) {
@@ -182,8 +173,12 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     if (proportion > 1.0) {
                         throw new InputValueException(columns[i], $"Proportion value '{columns[i]}' on line {lineNum}, column {i + 1} must be less than or equal to 1.0");
                     }
-                    
-                    var targetSpecies = columnHeaders[i];
+                    if (columnHeaders[i].ToUpper() == "DEAD") {
+                        columnHeaders[i] = "DEAD";
+                    }
+                    if (!speciesNameToISpecies.TryGetValue(columnHeaders[i], out ISpecies targetSpecies)) {
+                        throw new InputValueException(columnHeaders[i], $"Species '{columnHeaders[i]}' on line {lineNum} of SpeciesMatrix file does not exist in scenario species list.3");
+                    }
                     if (proportion > 0.0) {
                         speciesTransitionMatrix[sourceSpecies].Add((targetSpecies, proportion));
                     }
@@ -191,11 +186,11 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
             foreach (var species in speciesTransitionMatrix) {
                 double totalSpecifiedProportion = 0.0;
-                foreach ((string transitionToSpecies, double proportion) in species.Value) {
+                foreach ((ISpecies transitionToSpecies, double proportion) in species.Value) {
                     totalSpecifiedProportion += proportion;
                 }
                 if (totalSpecifiedProportion > 1.0) {
-                    throw new InputValueException(species.Key, $"Proportions for species '{species.Key}' must sum to 1.0 or less (current sum: {totalSpecifiedProportion}).");
+                    throw new InputValueException(species.Key.Name, $"Proportions for species '{species.Key.Name}' must sum to 1.0 or less (current sum: {totalSpecifiedProportion}).");
                 }
                 if (totalSpecifiedProportion != 1.0) {
                     species.Value.Insert(0, (null, 1.0 - totalSpecifiedProportion));
@@ -211,7 +206,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             foreach (var outerEntry in speciesTransitionMatrix)
             {
                 PlugIn.ModelCore.UI.WriteLine($"  Source Species: {outerEntry.Key}");
-                foreach ((string transitionToSpecies, double proportion) in outerEntry.Value)
+                foreach ((ISpecies transitionToSpecies, double proportion) in outerEntry.Value)
                 {
                     PlugIn.ModelCore.UI.WriteLine($"    Target: {((transitionToSpecies == null) ? outerEntry.Key : transitionToSpecies)}, Proportion: {proportion * 100}%");
                 }

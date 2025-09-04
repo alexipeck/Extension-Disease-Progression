@@ -32,11 +32,11 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
     public interface IInputParameters
     {
         int Timestep {get;set;}
-        Dictionary<string, List<(string, double)>> SpeciesTransitionMatrix { get; set; }
+        Dictionary<ISpecies, List<(ISpecies, double)>> SpeciesTransitionMatrix { get; set; }
         Dictionary<ISpecies, HostIndex> SpeciesHostIndex { get; set; }
-        List<(string, double)> GetTransitionMatrixDistribution(string speciesName);
-        bool TransitionMatrixContainsSpecies(string speciesName);
-        string DerivedHealthySpecies { get; set; }
+        List<(ISpecies, double)> GetTransitionMatrixDistribution(ISpecies species);
+        bool TransitionMatrixContainsSpecies(ISpecies species);
+        ISpecies DerivedHealthySpecies { get; set; }
         DispersalProbabilityAlgorithm DispersalProbabilityAlgorithm { get; set; }
         int DispersalMaxDistance { get; set; }
         double AlphaCoefficient { get; set; }
@@ -45,13 +45,13 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         : IInputParameters
     {
         private int timestep;
-        private Dictionary<string, List<(string, double)>> speciesTransitionMatrix;
+        private Dictionary<ISpecies, List<(ISpecies, double)>> speciesTransitionMatrix;
         private Dictionary<ISpecies, HostIndex> speciesHostIndex;
-        private string derivedHealthySpecies;
+        private ISpecies derivedHealthySpecies;
         private DispersalProbabilityAlgorithm dispersalType;
         private int dispersalMaxDistance;
         private double alphaCoefficient;
-        public Dictionary<string, List<(string, double)>> SpeciesTransitionMatrix
+        public Dictionary<ISpecies, List<(ISpecies, double)>> SpeciesTransitionMatrix
         {
             get {
                 return speciesTransitionMatrix;
@@ -89,7 +89,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
         }
 
-        public string DerivedHealthySpecies
+        public ISpecies DerivedHealthySpecies
         {
             get {
                 return derivedHealthySpecies;
@@ -122,11 +122,11 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
         }
 
-        public bool TransitionMatrixContainsSpecies(string speciesName) {
-            return speciesTransitionMatrix.ContainsKey(speciesName);
+        public bool TransitionMatrixContainsSpecies(ISpecies species) {
+            return speciesTransitionMatrix.ContainsKey(species);
         }
-        public List<(string, double)> GetTransitionMatrixDistribution(string speciesName) {
-            if (!speciesTransitionMatrix.TryGetValue(speciesName, out List<(string, double)> speciesTransitions)) {
+        public List<(ISpecies, double)> GetTransitionMatrixDistribution(ISpecies species) {
+            if (!speciesTransitionMatrix.TryGetValue(species, out List<(ISpecies, double)> speciesTransitions)) {
                 return null;
             }
             return speciesTransitions;

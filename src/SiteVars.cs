@@ -26,15 +26,15 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         //TODO: Add to input parameters
         private static int resproutMaxLongevity;
         private const int MAX_IMAGE_SIZE = 16384;
-        private static readonly Dictionary<string, ISpecies> speciesNameToISpecies = new Dictionary<string, ISpecies>();
+        //private static readonly Dictionary<string, ISpecies> speciesNameToISpecies = new Dictionary<string, ISpecies>();
         private static SHIMode siteHostIndexMode = SHIMode.Mean;
         public static void Initialize(ICore modelCore, IInputParameters parameters) {
             universalCohorts = PlugIn.ModelCore.GetSiteVar<SiteCohorts>("Succession.UniversalCohorts");
             landscapeDimensions = (PlugIn.ModelCore.Landscape.Dimensions.Columns, PlugIn.ModelCore.Landscape.Dimensions.Rows);
             speciesHostIndex = parameters.SpeciesHostIndex;
-            foreach (var species in PlugIn.ModelCore.Species) {
+            /* foreach (var species in PlugIn.ModelCore.Species) {
                 speciesNameToISpecies[species.Name] = species;
-            }
+            } */
 
             int worstCaseMaximumDispersalCellDistanceX = (int)Math.Ceiling(parameters.DispersalMaxDistance / PlugIn.ModelCore.CellLength);
             worstCaseMaximumDispersalCellDistance = (worstCaseMaximumDispersalCellDistanceX, (int)(worstCaseMaximumDispersalCellDistanceX * 0.7071067812) + 1);
@@ -67,9 +67,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 siteHostIndexMode = value;
             }
         }
-        public static ISpecies GetISpecies(string speciesName) {
+        /* public static ISpecies GetISpecies(string speciesName) {
             return speciesNameToISpecies[speciesName];
-        }
+        } */
         public static int DispersalProbabilityMatrixWidth {
             get {
                 return dispersalProbabilityMatrixWidth;

@@ -50,8 +50,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         {
             ModelCore.UI.WriteLine("Species selected for disease progression:");
             SiteVars.Initialize(ModelCore, parameters);
-            foreach (string speciesName in parameters.SpeciesTransitionMatrix.Keys) {
-                ModelCore.UI.WriteLine($"{speciesName}");
+            foreach (ISpecies speciesName in parameters.SpeciesTransitionMatrix.Keys) {
+                ModelCore.UI.WriteLine($"{speciesName.Name}");
             }
             ModelCore.UI.WriteLine("");
             Timestep = parameters.Timestep;
@@ -89,6 +89,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             int dispersalProbabilityMatrixWidth = SiteVars.DispersalProbabilityMatrixWidth;
             IEnumerable<ActiveSite> sites = ModelCore.Landscape.ActiveSites;
             (int x, int y) worstCaseMaximumUniformDispersalDistance = SiteVars.GetWorstCaseMaximumUniformDispersalDistance();
+            ISpecies derivedHealthySpecies = parameters.DerivedHealthySpecies;
 
             ////////Resprouting TODO: REWORK
             int[] resproutLifetime = SiteVars.ResproutLifetime;
@@ -104,7 +105,6 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 }
             }
             SiteVars.DecrementResproutLifetimes();
-            ISpecies derivedHealthySpecies = SiteVars.GetISpecies(parameters.DerivedHealthySpecies);
             foreach (ActiveSite site in sites) {
                 Location siteLocation = site.Location;
                 if (!willResprout[SiteVars.CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX)]) continue;
@@ -117,9 +117,13 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             
             double[] SHI = new double[landscapeSize];
             bool[] sitesForProportioning = new bool[landscapeSize];
+            //TODO: Might be able to decommission these soon
             List<(int x, int y)> healthySitesList = new List<(int x, int y)>();
             List<(int x, int y)> infectedSitesList = new List<(int x, int y)>();
             List<(int x, int y)> ignoredSitesList = new List<(int x, int y)>();
+            List<int> healthySitesListIndices = new List<int>();
+            List<int> infectedSitesListIndices = new List<int>();
+            List<int> ignoredSitesListIndices = new List<int>();
 
             ////////calculate SHI
             foreach (ActiveSite site in sites) {
@@ -186,20 +190,24 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 bool containsHealthySpecies = false;
                 bool containsInfectedSpecies = false;
                 foreach (ISpeciesCohorts speciesCohorts in SiteVars.Cohorts[site]) {
-                    if (speciesCohorts.Species.Name == parameters.DerivedHealthySpecies) {
+                    if (speciesCohorts.Species == parameters.DerivedHealthySpecies) {
                         containsHealthySpecies = true;
-                    } else if (parameters.TransitionMatrixContainsSpecies(speciesCohorts.Species.Name)) {
+                    } else if (parameters.TransitionMatrixContainsSpecies(speciesCohorts.Species)) {
                         containsInfectedSpecies = true;
                     }
                 }
                 Location siteLocation = site.Location;
+                int index = SiteVars.CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX);
                 if (containsHealthySpecies && !containsInfectedSpecies) {
                     healthySitesList.Add((siteLocation.Column, siteLocation.Row));
+                    healthySitesListIndices.Add(index);
                 } else if (containsInfectedSpecies) {
                     infectedSitesList.Add((siteLocation.Column, siteLocation.Row));
-                    sitesForProportioning[SiteVars.CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX)] = true;
+                    infectedSitesListIndices.Add(index);
+                    sitesForProportioning[index] = true;
                 } else {
                     ignoredSitesList.Add((siteLocation.Column, siteLocation.Row));
+                    ignoredSitesListIndices.Add(index);
                 }
             }
 
@@ -296,7 +304,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                         Cohort concreteCohort = (Cohort)cohort;
 
                         //process entry through matrix
-                        var transitionDistribution = parameters.GetTransitionMatrixDistribution(speciesCohorts.Species.Name);
+                        var transitionDistribution = parameters.GetTransitionMatrixDistribution(speciesCohorts.Species);
 
                         //no transition will occur
                         if (transitionDistribution == null) {
@@ -319,12 +327,12 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                         int totalBiomassAccountedFor = 0;
                         int remainingBiomass = concreteCohort.Data.Biomass;
                         
-                        foreach ((string species, double proportion) in transitionDistribution) {
+                        foreach ((ISpecies targetSpecies, double proportion) in transitionDistribution) {
                             //null case is the no change case within the matrix accounting for either
                             //the user specified proportion in the case of all proportions for a line
                             //adding up to 1.0, in all other cases, the null case equals the user specified
                             //proportion + the remaining proportion
-                            if (species != null) {
+                            if (targetSpecies != null) {
                                 if (remainingBiomass == 0) {
                                     break;
                                 }
@@ -337,7 +345,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                                 }
                                 remainingBiomass -= transfer;
                                 totalBiomassAccountedFor += transfer;
-                                if (species.ToUpper() == "DEAD" || concreteCohort.Data.Biomass == 1) {
+                                if (targetSpecies == null || concreteCohort.Data.Biomass == 1) {
                                     //This is a hacky way to kill miniscule cohorts
                                     if (concreteCohort.Data.Biomass == 1) {
                                         transfer = 1;
@@ -351,7 +359,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                                     SiteVars.AddResproutLifetime(siteLocation.Row - 1, siteLocation.Column - 1);
                                     continue; //short-circuit
                                 }
-                                ISpecies targetSpecies = SiteVars.GetISpecies(species);
+                                //ISpecies targetSpecies = SiteVars.GetISpecies(species);
 
                                 //push biomass to target species cohort
                                 if (!newSiteCohortsDictionary.ContainsKey(targetSpecies)) {
