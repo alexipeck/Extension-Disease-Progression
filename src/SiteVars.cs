@@ -67,9 +67,6 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 siteHostIndexMode = value;
             }
         }
-        /* public static ISpecies GetISpecies(string speciesName) {
-            return speciesNameToISpecies[speciesName];
-        } */
         public static int DispersalProbabilityMatrixWidth {
             get {
                 return dispersalProbabilityMatrixWidth;

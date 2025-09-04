@@ -56,14 +56,15 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             ModelCore.UI.WriteLine("");
             Timestep = parameters.Timestep;
             
-            //empty the infection timeline folder
-            string infectionTimelinePath = "./infection_timeline";
-            if (System.IO.Directory.Exists(infectionTimelinePath)) {
-                System.IO.DirectoryInfo directory = new System.IO.DirectoryInfo(infectionTimelinePath);
-                foreach (System.IO.FileInfo file in directory.GetFiles()) {
-                    file.Delete();
+            string[] pathsToEmpty = new string[] { "./infection_timeline", "./shi_timeline", "./shi_normalized_timeline" };
+            foreach (string path in pathsToEmpty) {
+                if (System.IO.Directory.Exists(path)) {
+                    System.IO.DirectoryInfo directory = new System.IO.DirectoryInfo(path);
+                    foreach (System.IO.FileInfo file in directory.GetFiles()) {
+                        file.Delete();
+                    }
+                    ModelCore.UI.WriteLine($"Emptied folder: {path}");
                 }
-                ModelCore.UI.WriteLine($"Emptied infection timeline folder: {infectionTimelinePath}");
             }
             
             ModelCore.UI.WriteLine("Disease progression initialized");
@@ -235,6 +236,37 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     ModelCore.UI.WriteLine($"      Finished outputting infection state: {outputStopwatch.ElapsedMilliseconds} ms");
                 });
             }
+
+
+            //////// PRIMARY CALCULATION
+            double[] FOI = new double[landscapeSize];
+            for (int i = 0; i < landscapeSize; i++) {
+                FOI[i] = 
+                    /* Transmission & Weather Index * */
+                    (SHISum - SHI[i])
+                    * SHI[i]
+                    /* * Source Infection Probability Index */
+                    /* * Distance Decay Index */;
+            }
+            {
+                double[] FOICopy = new double[landscapeSize];
+                Array.Copy(FOI, FOICopy, landscapeSize);
+                Task.Run(() => {
+                    Stopwatch shiOutputStopwatch = new Stopwatch();
+                    shiOutputStopwatch.Start();
+                    try {
+                        string outputPath = $"./foi_timeline/foi_state_{modelCore.CurrentTime}.png";
+                        SiteVars.GenerateSHIStateBitmap(outputPath, FOICopy);
+                    }
+                    catch (Exception ex) {
+                        ModelCore.UI.WriteLine($"Debug bitmap generation failed: {ex.Message}");
+                        throw;
+                    }
+                    shiOutputStopwatch.Stop();
+                    ModelCore.UI.WriteLine($"      Finished outputting FOI state: {shiOutputStopwatch.ElapsedMilliseconds} ms");
+                });
+            }
+            ////////
             
             //int numberOfInfectedSitesBeforeDispersal = infectedSitesList.Count;
 
