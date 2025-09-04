@@ -85,13 +85,14 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             
             int landscapeX = SiteVars.LandscapeDimensions.x;
             int landscapeY = SiteVars.LandscapeDimensions.y;
+            int landscapeSize = landscapeX * landscapeY;
             int dispersalProbabilityMatrixWidth = SiteVars.DispersalProbabilityMatrixWidth;
             IEnumerable<ActiveSite> sites = ModelCore.Landscape.ActiveSites;
             (int x, int y) worstCaseMaximumUniformDispersalDistance = SiteVars.GetWorstCaseMaximumUniformDispersalDistance();
 
             ////////Resprouting TODO: REWORK
             int[] resproutLifetime = SiteVars.ResproutLifetime;
-            bool[] willResprout = new bool[landscapeX * landscapeY];
+            bool[] willResprout = new bool[landscapeSize];
             for (int x = 0; x < landscapeX; x++) {
                 for (int y = 0; y < landscapeY; y++) {
                     int index = SiteVars.CalculateCoordinatesToIndex(x, y, landscapeX);
@@ -114,8 +115,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             Stopwatch stopwatch = new Stopwatch();
             stopwatch.Start();
             
-            double[] SHI = new double[landscapeX * landscapeY];
-            bool[] sitesForProportioning = new bool[landscapeX * landscapeY];
+            double[] SHI = new double[landscapeSize];
+            bool[] sitesForProportioning = new bool[landscapeSize];
             List<(int x, int y)> healthySitesList = new List<(int x, int y)>();
             List<(int x, int y)> infectedSitesList = new List<(int x, int y)>();
             List<(int x, int y)> ignoredSitesList = new List<(int x, int y)>();
@@ -126,25 +127,59 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 SHI[SiteVars.CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX)] = (int)SiteVars.CalculateSiteHostIndex(site);
             }
             
-            double[] SHICopy = new double[SHI.Length];
-            Array.Copy(SHI, SHICopy, SHI.Length);
-            Task.Run(() => {
-                Stopwatch shiOutputStopwatch = new Stopwatch();
-                shiOutputStopwatch.Start();
-                try {
-                    string outputPath = $"./shi_timeline/shi_state_{modelCore.CurrentTime}.png";
-                    SiteVars.GenerateSHIStateBitmap(outputPath, SHICopy);
-                }
-                catch (Exception ex) {
-                    ModelCore.UI.WriteLine($"Debug bitmap generation failed: {ex.Message}");
-                    throw;
-                }
-                shiOutputStopwatch.Stop();
-                ModelCore.UI.WriteLine($"      Finished outputting SHI state: {shiOutputStopwatch.ElapsedMilliseconds} ms");
-            });
+            {
+                double[] SHICopy = new double[landscapeSize];
+                Array.Copy(SHI, SHICopy, landscapeSize);
+                Task.Run(() => {
+                    Stopwatch shiOutputStopwatch = new Stopwatch();
+                    shiOutputStopwatch.Start();
+                    try {
+                        string outputPath = $"./shi_timeline/shi_state_{modelCore.CurrentTime}.png";
+                        SiteVars.GenerateSHIStateBitmap(outputPath, SHICopy);
+                    }
+                    catch (Exception ex) {
+                        ModelCore.UI.WriteLine($"Debug bitmap generation failed: {ex.Message}");
+                        throw;
+                    }
+                    shiOutputStopwatch.Stop();
+                    ModelCore.UI.WriteLine($"      Finished outputting SHI state: {shiOutputStopwatch.ElapsedMilliseconds} ms");
+                });
+            }
             ////////
             
             double SHISum = SHI.Sum();
+            double SHIMean = SHISum / landscapeSize;
+
+            double[] SHIM = new double[landscapeSize];
+            for (int i = 0; i < landscapeSize; i++) {
+                //TODO: Add land type modifier (LTM) and summed disturbance modifiers
+                SHIM[i] = SiteVars.CalculateSiteHostIndexModified(SHI[i], 0.0, 0.0);
+            }
+
+            double[] SHIMNormalized = new double[landscapeSize];
+
+            for (int i = 0; i < landscapeSize; i++) {
+                SHIMNormalized[i] = SHIM[i] / SHIMean;
+            }
+
+            {
+                double[] SHINormalizedCopy = new double[landscapeSize];
+                Array.Copy(SHIMNormalized, SHINormalizedCopy, landscapeSize);
+                Task.Run(() => {
+                    Stopwatch shiOutputStopwatch = new Stopwatch();
+                    shiOutputStopwatch.Start();
+                    try {
+                        string outputPath = $"./shi_normalized_timeline/shi_normalized_state_{modelCore.CurrentTime}.png";
+                        SiteVars.GenerateSHIStateBitmap(outputPath, SHINormalizedCopy);
+                    }
+                    catch (Exception ex) {
+                        ModelCore.UI.WriteLine($"Debug bitmap generation failed: {ex.Message}");
+                        throw;
+                    }
+                    shiOutputStopwatch.Stop();
+                    ModelCore.UI.WriteLine($"      Finished outputting SHI Normalized state: {shiOutputStopwatch.ElapsedMilliseconds} ms");
+                });
+            }
             
             // infection detection & adjustment pass
             foreach (ActiveSite site in sites) {

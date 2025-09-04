@@ -178,6 +178,10 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
         }
 
+        public static double CalculateSiteHostIndexModified(double siteHostIndex, double landTypeModifier, double disturbanceModifiersSum) {
+            return siteHostIndex + landTypeModifier + disturbanceModifiersSum;
+        }
+
         //If given non-half-quadrate-canonicalized index, it will crash
         public static double GetDispersalProbability(int index) {
             return indexOffsetDispersalProbability[index];
