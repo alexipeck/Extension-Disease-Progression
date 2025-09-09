@@ -72,6 +72,11 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 return dispersalProbabilityMatrixWidth;
             }
         }
+        public static int DispersalProbabilityMatrixHeight {
+            get {
+                return dispersalProbabilityMatrixHeight;
+            }
+        }
         public static int[] ResproutLifetime {
             get {
                 return resproutLifetime;
@@ -216,7 +221,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             double[] dispersalLookupMatrix = new double[dispersalProbabilityMatrixLength];
             int dispersalLookupMatrixCount = 0;
             for (int x = 0; x < dispersalProbabilityMatrixWidth; x++) {
-                for (int y = 0; y <= x; y++) {
+                int yMax = Math.Min(x, dispersalProbabilityMatrixHeight - 1);
+                for (int y = 0; y <= yMax; y++) {
                     if (x == 0 && y == 0) continue;
                     double distance = CalculatedEuclideanDistanceUsingGridOffset(x, y) * cellLength;
                     //Console.WriteLine($"x: {x}, y: {y}, Distance: {distance}");

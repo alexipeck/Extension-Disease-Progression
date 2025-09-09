@@ -88,6 +88,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             int landscapeY = SiteVars.LandscapeDimensions.y;
             int landscapeSize = landscapeX * landscapeY;
             int dispersalProbabilityMatrixWidth = SiteVars.DispersalProbabilityMatrixWidth;
+            int dispersalProbabilityMatrixHeight = SiteVars.DispersalProbabilityMatrixHeight;
             IEnumerable<ActiveSite> sites = ModelCore.Landscape.ActiveSites;
             (int x, int y) worstCaseMaximumUniformDispersalDistance = SiteVars.GetWorstCaseMaximumUniformDispersalDistance();
             ISpecies derivedHealthySpecies = parameters.DerivedHealthySpecies;
@@ -287,7 +288,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 foreach ((int x, int y) infectedSite in infectedSitesList) {
                     (int x, int y) relativeGridOffset = SiteVars.CalculateRelativeGridOffset(infectedSite.x, infectedSite.y, healthySite.x, healthySite.y);
                     (int x, int y) canonicalizedRelativeGridOffset = SiteVars.CanonicalizeToHalfQuadrant(relativeGridOffset.x, relativeGridOffset.y);
-                    if (canonicalizedRelativeGridOffset.x >= worstCaseMaximumUniformDispersalDistance.x || canonicalizedRelativeGridOffset.y >= worstCaseMaximumUniformDispersalDistance.y) continue;
+                    if (canonicalizedRelativeGridOffset.x >= dispersalProbabilityMatrixWidth || canonicalizedRelativeGridOffset.y >= dispersalProbabilityMatrixHeight) continue;
                     double dispersalProbability = SiteVars.GetDispersalProbability(SiteVars.CalculateCoordinatesToIndex(canonicalizedRelativeGridOffset.x, canonicalizedRelativeGridOffset.y, dispersalProbabilityMatrixWidth));
                     cumulativeDispersalProbability += dispersalProbability;
                 }
