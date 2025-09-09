@@ -56,7 +56,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             ModelCore.UI.WriteLine("");
             Timestep = parameters.Timestep;
             
-            string[] pathsToEmpty = new string[] { "./infection_timeline", "./shi_timeline", "./shi_normalized_timeline" };
+            string[] pathsToEmpty = new string[] { "./infection_timeline", "./shi_timeline", "./shim_timeline", "./shim_normalized_timeline" };
             foreach (string path in pathsToEmpty) {
                 if (System.IO.Directory.Exists(path)) {
                     System.IO.DirectoryInfo directory = new System.IO.DirectoryInfo(path);
@@ -118,6 +118,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             stopwatch.Start();
             
             double[] SHI = new double[landscapeSize];
+            double[] SHIM = new double[landscapeSize];
             bool[] sitesForProportioning = new bool[landscapeSize];
             //TODO: Might be able to decommission these soon
             List<(int x, int y)> healthySitesList = new List<(int x, int y)>();
@@ -130,62 +131,23 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             ////////calculate SHI
             foreach (ActiveSite site in sites) {
                 Location siteLocation = site.Location;
-                SHI[SiteVars.CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX)] = (int)SiteVars.CalculateSiteHostIndex(site);
-            }
-            
-            {
-                double[] SHICopy = new double[landscapeSize];
-                Array.Copy(SHI, SHICopy, landscapeSize);
-                Task.Run(() => {
-                    Stopwatch shiOutputStopwatch = new Stopwatch();
-                    shiOutputStopwatch.Start();
-                    try {
-                        string outputPath = $"./shi_timeline/shi_state_{modelCore.CurrentTime}.png";
-                        SiteVars.GenerateSHIStateBitmap(outputPath, SHICopy);
-                    }
-                    catch (Exception ex) {
-                        ModelCore.UI.WriteLine($"Debug bitmap generation failed: {ex.Message}");
-                        throw;
-                    }
-                    shiOutputStopwatch.Stop();
-                    ModelCore.UI.WriteLine($"      Finished outputting SHI state: {shiOutputStopwatch.ElapsedMilliseconds} ms");
-                });
-            }
-            ////////
-            
-            double SHISum = SHI.Sum();
-            double SHIMean = SHISum / landscapeSize;
-
-            double[] SHIM = new double[landscapeSize];
-            for (int i = 0; i < landscapeSize; i++) {
+                int index = SiteVars.CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX);
+                SHI[index] = (int)SiteVars.CalculateSiteHostIndex(site);
                 //TODO: Add land type modifier (LTM) and summed disturbance modifiers
-                SHIM[i] = SiteVars.CalculateSiteHostIndexModified(SHI[i], 0.0, 0.0);
+                SHIM[index] = SiteVars.CalculateSiteHostIndexModified(SHI[index], 0.0, 0.0);
             }
-
-            double[] SHIMNormalized = new double[landscapeSize];
-
+            
+            ExportBitmap(SHI, "./shi_timeline/shi_state", "SHI");
+            ExportBitmap(SHIM, "./shim_timeline/shim_state", "SHIM");
+            
+            double SHIMMean = SHIM.Sum() / ModelCore.Landscape.ActiveSiteCount;
             for (int i = 0; i < landscapeSize; i++) {
-                SHIMNormalized[i] = SHIM[i] / SHIMean;
+                //TODO: Consider adding a branch to skip if SHIM[i] isn't more than 0, but mathematically running it on 0 is fine
+                SHIM[i] /= SHIMMean;
             }
 
-            {
-                double[] SHINormalizedCopy = new double[landscapeSize];
-                Array.Copy(SHIMNormalized, SHINormalizedCopy, landscapeSize);
-                Task.Run(() => {
-                    Stopwatch shiOutputStopwatch = new Stopwatch();
-                    shiOutputStopwatch.Start();
-                    try {
-                        string outputPath = $"./shi_normalized_timeline/shi_normalized_state_{modelCore.CurrentTime}.png";
-                        SiteVars.GenerateSHIStateBitmap(outputPath, SHINormalizedCopy);
-                    }
-                    catch (Exception ex) {
-                        ModelCore.UI.WriteLine($"Debug bitmap generation failed: {ex.Message}");
-                        throw;
-                    }
-                    shiOutputStopwatch.Stop();
-                    ModelCore.UI.WriteLine($"      Finished outputting SHI Normalized state: {shiOutputStopwatch.ElapsedMilliseconds} ms");
-                });
-            }
+            
+            ExportBitmap(SHIM, "./shim_normalized_timeline/shim_normalized_state", "SHI Normalized");
             
             // infection detection & adjustment pass
             foreach (ActiveSite site in sites) {
@@ -238,35 +200,27 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 });
             }
 
-
             //////// PRIMARY CALCULATION
             double[] FOI = new double[landscapeSize];
             for (int i = 0; i < landscapeSize; i++) {
+                double sum = 0.0;
+                (int x, int y) targetCoordinates = SiteVars.CalculateIndexToCoordinates(i, landscapeX);
+                for (int j = 0; j < landscapeSize; j++) {
+                    if (i == j) continue;
+                    (int x, int y) sourceCoordinates = SiteVars.CalculateIndexToCoordinates(j, landscapeX);
+                    (int x, int y) relativeCoordinates = SiteVars.CalculateRelativeGridOffset(targetCoordinates.x, targetCoordinates.y, sourceCoordinates.x, sourceCoordinates.y);
+                    (int x, int y) canonicalizedRelativeCoordinates = SiteVars.CanonicalizeToHalfQuadrant(relativeCoordinates.x, relativeCoordinates.y);
+                    double decay = SiteVars.GetDispersalProbability(SiteVars.CalculateCoordinatesToIndex(canonicalizedRelativeCoordinates.x, canonicalizedRelativeCoordinates.y, dispersalProbabilityMatrixWidth));
+                    sum += SHIM[i]
+                        * SHIM[j]
+                        /* * Source Infection Probability Index */
+                        * decay;
+                }
                 FOI[i] = 
                     /* Transmission & Weather Index * */
-                    (SHISum - SHI[i])
-                    * SHI[i]
-                    /* * Source Infection Probability Index */
-                    /* * Distance Decay Index */;
+                    sum;
             }
-            {
-                double[] FOICopy = new double[landscapeSize];
-                Array.Copy(FOI, FOICopy, landscapeSize);
-                Task.Run(() => {
-                    Stopwatch shiOutputStopwatch = new Stopwatch();
-                    shiOutputStopwatch.Start();
-                    try {
-                        string outputPath = $"./foi_timeline/foi_state_{modelCore.CurrentTime}.png";
-                        SiteVars.GenerateSHIStateBitmap(outputPath, FOICopy);
-                    }
-                    catch (Exception ex) {
-                        ModelCore.UI.WriteLine($"Debug bitmap generation failed: {ex.Message}");
-                        throw;
-                    }
-                    shiOutputStopwatch.Stop();
-                    ModelCore.UI.WriteLine($"      Finished outputting FOI state: {shiOutputStopwatch.ElapsedMilliseconds} ms");
-                });
-            }
+            ExportBitmap(FOI, "./foi_timeline/foi_state", "FOI");
             ////////
             
             //int numberOfInfectedSitesBeforeDispersal = infectedSitesList.Count;
@@ -453,5 +407,25 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
 
 
         public override void AddCohortData() { return; }
+
+        private static void ExportBitmap(double[] data, string filePathPrefix, string label)
+        {
+            double[] dataCopy = new double[data.Length];
+            Array.Copy(data, dataCopy, data.Length);
+            Task.Run(() => {
+                Stopwatch outputStopwatch = new Stopwatch();
+                outputStopwatch.Start();
+                try {
+                    string outputPath = $"{filePathPrefix}_{modelCore.CurrentTime}.png";
+                    SiteVars.GenerateSHIStateBitmap(outputPath, dataCopy);
+                }
+                catch (Exception ex) {
+                    ModelCore.UI.WriteLine($"Debug bitmap generation failed: {ex.Message}");
+                    throw;
+                }
+                outputStopwatch.Stop();
+                ModelCore.UI.WriteLine($"      Finished outputting {label} state: {outputStopwatch.ElapsedMilliseconds} ms");
+            });
+        }
     }
 }
