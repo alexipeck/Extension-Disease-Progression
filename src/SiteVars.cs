@@ -42,14 +42,14 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             precalculatedDispersalDistanceOffsets = new List<(int x, int y)>();
             for (int x = -worstCaseMaximumDispersalCellDistance.x; x <= worstCaseMaximumDispersalCellDistance.x; x++) {
                 for (int y = -worstCaseMaximumDispersalCellDistance.y; y <= worstCaseMaximumDispersalCellDistance.y; y++) {
-                    if ((x == 0 && y == 0) || CalculateEuclideanDistance(x, y, 0, 0) > worstCaseMaximumDispersalCellDistance.x) continue;
+                    if ((x == 0 && y == 0) || CalculatedEuclideanDistanceUsingGridOffset(x, y) > worstCaseMaximumDispersalCellDistance.x) continue;
                     precalculatedDispersalDistanceOffsets.Add((x, y));
                 }
             };
             PlugIn.ModelCore.UI.WriteLine($"Generating dispersal lookup matrix for {LandscapeDimensions.x}x{LandscapeDimensions.y} landscape");
             dispersalProbabilityMatrixWidth = worstCaseMaximumDispersalCellDistance.x + 1;
             dispersalProbabilityMatrixHeight = (int)(worstCaseMaximumDispersalCellDistance.x * 0.7071067812) + 1;
-            indexOffsetDispersalProbability = GenerateDispersalProbabilityMatrix(parameters.DispersalProbabilityAlgorithm, parameters.AlphaCoefficient, PlugIn.ModelCore.CellLength, worstCaseMaximumDispersalCellDistance.x, parameters.DispersalMaxDistance);
+            indexOffsetDispersalProbability = GenerateDispersalProbabilityMatrix(parameters.DispersalProbabilityKernel, parameters.AlphaCoefficient, PlugIn.ModelCore.CellLength, worstCaseMaximumDispersalCellDistance.x, parameters.DispersalMaxDistance);
             PlugIn.ModelCore.UI.WriteLine("Generating dispersal probability matrix image");
             GenerateProbabilityMatrixImage(indexOffsetDispersalProbability);
             //TODO: Initializes empty for now, but realistically the spinup cycle should add some sites to this
@@ -122,6 +122,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         private static double CalculateEuclideanDistance(int x1, int y1, int x2, int y2) {
             return Math.Sqrt(Math.Pow(x2 - x1, 2) + Math.Pow(y2 - y1, 2));
         }
+        private static double CalculatedEuclideanDistanceUsingGridOffset(int x, int y) {
+            return Math.Sqrt(x * x + y * y);
+        }
         /* public static double CalculateTransmissionAndWeatherIndex() {
 
         } */
@@ -184,7 +187,6 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             return indexOffsetDispersalProbability[index];
         }
 
-        //Reduces memory usage of the dictionary by 87.5%
         public static (int x, int y) CanonicalizeToHalfQuadrant(int x, int y) {
             int sx = x < 0 ? 1 : 0;
             int sy = y < 0 ? 1 : 0;
@@ -199,52 +201,91 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             if (q1.y > q1.x) return (q1.y, q1.x);
             return q1;
         }
+        /* public static (int x, int y) CanonicalizeToHalfQuadrant(int x, int y) {
+            int ax = x < 0 ? -x : x;
+            int ay = y < 0 ? -y : y;
+            return ax >= ay ? (ax, ay) : (ay, ax);
+        } */
 
-        private static double[] GenerateDispersalProbabilityMatrix(DispersalProbabilityAlgorithm dispersalType, double alphaCoefficient, float cellLength, int maximumDispersalCellDistance, int maximumDispersalDistance) {
+        private static double[] GenerateDispersalProbabilityMatrix(DispersalProbabilityKernel dispersalKernel, double alphaCoefficient, float cellLength, int maximumDispersalCellDistance, int maximumDispersalDistance) {
+            double totalProbability = 0.0;
             Debug.Assert(cellLength > 0);
-            float cellArea = cellLength * cellLength;
+            //float cellArea = cellLength * cellLength;
+            int dispersalProbabilityMatrixLength = dispersalProbabilityMatrixWidth * dispersalProbabilityMatrixHeight;
             Console.WriteLine($"Max radius: {dispersalProbabilityMatrixWidth}");
-            double[] dispersalLookupMatrix = new double[dispersalProbabilityMatrixWidth * dispersalProbabilityMatrixHeight];
+            double[] dispersalLookupMatrix = new double[dispersalProbabilityMatrixLength];
             int dispersalLookupMatrixCount = 0;
             for (int x = 0; x < dispersalProbabilityMatrixWidth; x++) {
-                for (int y = 0; y <= x/* Math.Min(x, maxY) */; y++) {
-                    double distance = CalculateEuclideanDistance(x, y, 0, 0) * cellLength;
+                for (int y = 0; y <= x; y++) {
+                    if (x == 0 && y == 0) continue;
+                    double distance = CalculatedEuclideanDistanceUsingGridOffset(x, y) * cellLength;
                     //Console.WriteLine($"x: {x}, y: {y}, Distance: {distance}");
                     //if (distance > maximumDispersalDistance && distance < maximumDispersalDistance + 20) Console.WriteLine($"Distance {distance}");
                     if (distance > maximumDispersalDistance) continue;
-                    double probability = CalculateDispersalProbability(dispersalType, distance, alphaCoefficient, cellLength, cellArea);
+                    double probability = CalculateUncorrectedDispersalKernelProbability(dispersalKernel, distance, alphaCoefficient);
                     dispersalLookupMatrix[CalculateCoordinatesToIndex(x, y, dispersalProbabilityMatrixWidth)] = probability;
                     dispersalLookupMatrixCount++;
+                    if (x == y || x == 0 || y == 0) {
+                        totalProbability += probability * 4;
+                    } else {
+                        totalProbability += probability * 8;
+                    }
                 }
             };
+            //normalize
+            for (int x = 0; x < dispersalProbabilityMatrixLength; x++) {
+                dispersalLookupMatrix[x] /= totalProbability;
+            }
             Console.WriteLine($"Generated dispersal matrix with {dispersalLookupMatrixCount} entries");
             
             return dispersalLookupMatrix;
         }
-
-        private static double CalculateDispersalProbability(DispersalProbabilityAlgorithm dispersalType, double distance, double alphaCoefficient, float cellLength, float cellArea) {
+        private static double CalculateUncorrectedDispersalKernelProbability(DispersalProbabilityKernel dispersalKernel, double distance, double alphaCoefficient) {
+            switch(dispersalKernel) {
+                case DispersalProbabilityKernel.PowerLaw:
+                    return 1 / Math.Pow(distance, alphaCoefficient);
+                case DispersalProbabilityKernel.NegativeExponent:
+                    return Math.Exp(-alphaCoefficient * distance);
+                case DispersalProbabilityKernel.SingleAnchoredPowerLaw:
+                    return Math.Pow(PlugIn.ModelCore.CellLength / distance, 2);
+                case DispersalProbabilityKernel.DoubleAnchoredPowerLaw:
+                    //TODO: Move k math to program start, allow all parameters to be pulled from config
+                    //      Even allowing the calibration points to go outside the bounds of the hard
+                    //      dispersal cutoff and starting point to allow clipping for the shape
+                    //worstCaseMaximumDispersalCellDistance.x is max dispersal distance / cell length
+                    double k = Math.Log(1.0/0.01) / Math.Log(worstCaseMaximumDispersalCellDistance.x);
+                    double a = 1.0 * Math.Pow(PlugIn.ModelCore.CellLength, k);
+                    return a * Math.Pow(distance, -k);
+                default:
+                    throw new ArgumentException($"Dispersal type {dispersalKernel} not supported");
+            }
+        }
+        /* private static double CalculateDispersalProbability(DispersalProbabilityKernel dispersalKernel, double distance, double alphaCoefficient, float cellLength, float cellArea) {
             if (distance == 0.0) {
                 return 0.0;
             }
             double density;
-            switch(dispersalType) {
-                case DispersalProbabilityAlgorithm.PowerLaw:
+            switch(dispersalKernel) {
+                case DispersalProbabilityKernel.PowerLaw:
                     if (alphaCoefficient <= 0.0) return 0.0;
-                    density = (alphaCoefficient * alphaCoefficient) / (2.0 * Math.PI) * Math.Exp(-alphaCoefficient * distance);
+                    density = (alphaCoefficient * alphaCoefficient) / (2.0 * Math.PI) * Math.Pow(distance, -alphaCoefficient);
                     break;
-                case DispersalProbabilityAlgorithm.NegativeExponent:
+                case DispersalProbabilityKernel.NegativeExponent:
                     double softeningLength = 0.5 * cellLength;
                     double normalization = ((alphaCoefficient - 1.0) * (alphaCoefficient - 2.0)) / (2.0 * Math.PI * softeningLength * softeningLength);
-                    density = normalization * Math.Pow(1.0 + distance / softeningLength, -alphaCoefficient);
+                    density = normalization * Math.Exp(-alphaCoefficient * distance / softeningLength);
+                    break;
+                case DispersalProbabilityKernel.InverseSquare:
+                    density = Math.Pow(PlugIn.ModelCore.CellLength / distance, 2);
                     break;
                 default:
-                    throw new ArgumentException($"Dispersal type {dispersalType} not supported");
+                    throw new ArgumentException($"Dispersal type {dispersalKernel} not supported");
             }
             double probability = density * cellArea;
             if (probability < 0.0) probability = 0.0;
             if (probability > 1.0) probability = 1.0;
             return probability;
-        }
+        } */
 
         public static ISiteVar<SiteCohorts> Cohorts
         {
@@ -291,7 +332,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                                 graphics.DrawRectangle(gridPen, pixelX, pixelY, cellSize, cellSize);
                             }
                             if (probability == 0.0) continue;
-                            string probabilityText = probability.ToString("E2");
+                            string probabilityText = probability.ToString("E3");
                             RectangleF cellRect = new RectangleF(pixelX, pixelY, cellSize, cellSize);
                             graphics.DrawString(probabilityText, font, textBrush, cellRect, stringFormat);
                         }

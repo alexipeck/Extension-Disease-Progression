@@ -27,8 +27,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
 
         protected override IInputParameters Parse()
         {
-            Type.SetDescription<DispersalProbabilityAlgorithm>("Dispersal Probability Algorithm");
-            InputValues.Register<DispersalProbabilityAlgorithm>(DispersalProbabilityAlgorithmParser);
+            Type.SetDescription<DispersalProbabilityKernel>("Dispersal Probability Algorithm");
+            InputValues.Register<DispersalProbabilityKernel>(DispersalProbabilityKernelParser);
             InputParameters parameters = new InputParameters();
 
             InputVar<int> timestep = new InputVar<int>("Timestep");
@@ -213,10 +213,10 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }            
             PlugIn.ModelCore.UI.WriteLine("Finished reading species matrix file");
 
-            InputVar<DispersalProbabilityAlgorithm> dispersalType = new InputVar<DispersalProbabilityAlgorithm>("DispersalProbabilityAlgorithm");
-            ReadVar(dispersalType);
-            PlugIn.ModelCore.UI.WriteLine($"Dispersal type: {dispersalType.Value}");
-            parameters.DispersalProbabilityAlgorithm = dispersalType.Value;
+            InputVar<DispersalProbabilityKernel> dispersalKernel = new InputVar<DispersalProbabilityKernel>("DispersalProbabilityKernel");
+            ReadVar(dispersalKernel);
+            PlugIn.ModelCore.UI.WriteLine($"Dispersal type: {dispersalKernel.Value}");
+            parameters.DispersalProbabilityKernel = dispersalKernel.Value;
 
             InputVar<int> dispersalMaximumDistance = new InputVar<int>("DispersalMaximumDistance");
             ReadVar(dispersalMaximumDistance);
@@ -231,13 +231,17 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             return parameters;
         }
 
-        public static DispersalProbabilityAlgorithm DispersalProbabilityAlgorithmParser(string text)
+        public static DispersalProbabilityKernel DispersalProbabilityKernelParser(string text)
         {
             if (text == "NegativeExponent")
-                return DispersalProbabilityAlgorithm.NegativeExponent;
+                return DispersalProbabilityKernel.NegativeExponent;
             else if (text == "PowerLaw")
-                return DispersalProbabilityAlgorithm.PowerLaw;
-            throw new System.FormatException("Valid algorithms: NegativeExponent, PowerLaw");
+                return DispersalProbabilityKernel.PowerLaw;
+            else if (text == "SingleAnchoredPowerLaw")
+                return DispersalProbabilityKernel.SingleAnchoredPowerLaw;
+            else if (text == "DoubleAnchoredPowerLaw")
+                return DispersalProbabilityKernel.DoubleAnchoredPowerLaw;
+            throw new System.FormatException("Valid kernels: NegativeExponent, PowerLaw, SingleAnchoredPowerLaw, DoubleAnchoredPowerLaw");
         }
     }
 }

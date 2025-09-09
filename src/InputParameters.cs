@@ -27,7 +27,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             High = high;
         }
     }
-    public enum DispersalProbabilityAlgorithm { PowerLaw, NegativeExponent };
+    public enum DispersalProbabilityKernel { PowerLaw, NegativeExponent, SingleAnchoredPowerLaw, DoubleAnchoredPowerLaw };
     public enum SHIMode { Mean, Max };
     public interface IInputParameters
     {
@@ -37,7 +37,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         List<(ISpecies, double)> GetTransitionMatrixDistribution(ISpecies species);
         bool TransitionMatrixContainsSpecies(ISpecies species);
         ISpecies DerivedHealthySpecies { get; set; }
-        DispersalProbabilityAlgorithm DispersalProbabilityAlgorithm { get; set; }
+        DispersalProbabilityKernel DispersalProbabilityKernel { get; set; }
         int DispersalMaxDistance { get; set; }
         double AlphaCoefficient { get; set; }
     }
@@ -48,7 +48,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         private Dictionary<ISpecies, List<(ISpecies, double)>> speciesTransitionMatrix;
         private Dictionary<ISpecies, HostIndex> speciesHostIndex;
         private ISpecies derivedHealthySpecies;
-        private DispersalProbabilityAlgorithm dispersalType;
+        private DispersalProbabilityKernel dispersalProbabilityKernel;
         private int dispersalMaxDistance;
         private double alphaCoefficient;
         public Dictionary<ISpecies, List<(ISpecies, double)>> SpeciesTransitionMatrix
@@ -70,13 +70,13 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
         }
 
-        public DispersalProbabilityAlgorithm DispersalProbabilityAlgorithm
+        public DispersalProbabilityKernel DispersalProbabilityKernel
         {
             get {
-                return dispersalType;
+                return dispersalProbabilityKernel;
             }
             set {
-                dispersalType = value;
+                dispersalProbabilityKernel = value;
             }
         }
         public int DispersalMaxDistance
