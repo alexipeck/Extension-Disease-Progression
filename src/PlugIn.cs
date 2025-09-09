@@ -10,6 +10,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.Threading.Tasks;
 using Landis.Library.Succession;
+using static Landis.Extension.Disturbance.DiseaseProgression.Auxiliary;
 
 namespace Landis.Extension.Disturbance.DiseaseProgression
 {
@@ -98,18 +99,18 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             bool[] willResprout = new bool[landscapeSize];
             for (int x = 0; x < landscapeX; x++) {
                 for (int y = 0; y < landscapeY; y++) {
-                    int index = SiteVars.CalculateCoordinatesToIndex(x, y, landscapeX);
+                    int index = CalculateCoordinatesToIndex(x, y, landscapeX);
                     if (resproutLifetime[index] > 0) {
                         Random rand = new Random();
                         double random = rand.NextDouble();
-                        if (random <= 0.15) willResprout[SiteVars.CalculateCoordinatesToIndex(x, y, landscapeX)] = true;
+                        if (random <= 0.15) willResprout[CalculateCoordinatesToIndex(x, y, landscapeX)] = true;
                     }
                 }
             }
             SiteVars.DecrementResproutLifetimes();
             foreach (ActiveSite site in sites) {
                 Location siteLocation = site.Location;
-                if (!willResprout[SiteVars.CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX)]) continue;
+                if (!willResprout[CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX)]) continue;
                 Reproduction.AddNewCohort(derivedHealthySpecies, site, "resprout", 0);
             }
             ////////
@@ -117,7 +118,6 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             Stopwatch stopwatch = new Stopwatch();
             stopwatch.Start();
             
-            double[] SHI = new double[landscapeSize];
             double[] SHIM = new double[landscapeSize];
             bool[] sitesForProportioning = new bool[landscapeSize];
             //TODO: Might be able to decommission these soon
@@ -128,19 +128,21 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             List<int> infectedSitesListIndices = new List<int>();
             List<int> ignoredSitesListIndices = new List<int>();
 
-            ////////calculate SHI
+            ////////calculate SHI & SHIM
+            double SHIMSum = 0.0;
             foreach (ActiveSite site in sites) {
                 Location siteLocation = site.Location;
-                int index = SiteVars.CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX);
-                SHI[index] = (int)SiteVars.CalculateSiteHostIndex(site);
+                int index = CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX);
+                double SHI = (int)SiteVars.CalculateSiteHostIndex(site);
                 //TODO: Add land type modifier (LTM) and summed disturbance modifiers
-                SHIM[index] = SiteVars.CalculateSiteHostIndexModified(SHI[index], 0.0, 0.0);
+                IEcoregion ecoregion = ModelCore.Ecoregion[site];
+                SHIM[index] = CalculateSiteHostIndexModified(SHI, 0.0, 0.0);
+                SHIMSum += SHIM[index];
             }
             
-            ExportBitmap(SHI, "./shi_timeline/shi_state", "SHI");
             ExportBitmap(SHIM, "./shim_timeline/shim_state", "SHIM");
             
-            double SHIMMean = SHIM.Sum() / ModelCore.Landscape.ActiveSiteCount;
+            double SHIMMean = SHIMSum / ModelCore.Landscape.ActiveSiteCount;
             for (int i = 0; i < landscapeSize; i++) {
                 //TODO: Consider adding a branch to skip if SHIM[i] isn't more than 0, but mathematically running it on 0 is fine
                 SHIM[i] /= SHIMMean;
@@ -161,7 +163,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     }
                 }
                 Location siteLocation = site.Location;
-                int index = SiteVars.CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX);
+                int index = CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX);
                 if (containsHealthySpecies && !containsInfectedSpecies) {
                     healthySitesList.Add((siteLocation.Column, siteLocation.Row));
                     healthySitesListIndices.Add(index);
@@ -204,13 +206,13 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             double[] FOI = new double[landscapeSize];
             for (int i = 0; i < landscapeSize; i++) {
                 double sum = 0.0;
-                (int x, int y) targetCoordinates = SiteVars.CalculateIndexToCoordinates(i, landscapeX);
+                (int x, int y) targetCoordinates = CalculateIndexToCoordinates(i, landscapeX);
                 for (int j = 0; j < landscapeSize; j++) {
                     if (i == j) continue;
-                    (int x, int y) sourceCoordinates = SiteVars.CalculateIndexToCoordinates(j, landscapeX);
-                    (int x, int y) relativeCoordinates = SiteVars.CalculateRelativeGridOffset(targetCoordinates.x, targetCoordinates.y, sourceCoordinates.x, sourceCoordinates.y);
-                    (int x, int y) canonicalizedRelativeCoordinates = SiteVars.CanonicalizeToHalfQuadrant(relativeCoordinates.x, relativeCoordinates.y);
-                    double decay = SiteVars.GetDispersalProbability(SiteVars.CalculateCoordinatesToIndex(canonicalizedRelativeCoordinates.x, canonicalizedRelativeCoordinates.y, dispersalProbabilityMatrixWidth));
+                    (int x, int y) sourceCoordinates = CalculateIndexToCoordinates(j, landscapeX);
+                    (int x, int y) relativeCoordinates = CalculateRelativeGridOffset(targetCoordinates.x, targetCoordinates.y, sourceCoordinates.x, sourceCoordinates.y);
+                    (int x, int y) canonicalizedRelativeCoordinates = CanonicalizeToHalfQuadrant(relativeCoordinates.x, relativeCoordinates.y);
+                    double decay = SiteVars.GetDispersalProbability(CalculateCoordinatesToIndex(canonicalizedRelativeCoordinates.x, canonicalizedRelativeCoordinates.y, dispersalProbabilityMatrixWidth));
                     sum += SHIM[i]
                         * SHIM[j]
                         /* * Source Infection Probability Index */
@@ -240,10 +242,10 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             foreach ((int x, int y) healthySite in healthySitesList) {
                 double cumulativeDispersalProbability = 0.0;
                 foreach ((int x, int y) infectedSite in infectedSitesList) {
-                    (int x, int y) relativeGridOffset = SiteVars.CalculateRelativeGridOffset(infectedSite.x, infectedSite.y, healthySite.x, healthySite.y);
-                    (int x, int y) canonicalizedRelativeGridOffset = SiteVars.CanonicalizeToHalfQuadrant(relativeGridOffset.x, relativeGridOffset.y);
+                    (int x, int y) relativeGridOffset = CalculateRelativeGridOffset(infectedSite.x, infectedSite.y, healthySite.x, healthySite.y);
+                    (int x, int y) canonicalizedRelativeGridOffset = CanonicalizeToHalfQuadrant(relativeGridOffset.x, relativeGridOffset.y);
                     if (canonicalizedRelativeGridOffset.x >= dispersalProbabilityMatrixWidth || canonicalizedRelativeGridOffset.y >= dispersalProbabilityMatrixHeight) continue;
-                    double dispersalProbability = SiteVars.GetDispersalProbability(SiteVars.CalculateCoordinatesToIndex(canonicalizedRelativeGridOffset.x, canonicalizedRelativeGridOffset.y, dispersalProbabilityMatrixWidth));
+                    double dispersalProbability = SiteVars.GetDispersalProbability(CalculateCoordinatesToIndex(canonicalizedRelativeGridOffset.x, canonicalizedRelativeGridOffset.y, dispersalProbabilityMatrixWidth));
                     cumulativeDispersalProbability += dispersalProbability;
                 }
                 if (cumulativeDispersalProbability == 0.0) continue;
@@ -254,7 +256,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 double random = rand.NextDouble();
                 if (random <= healthySite.cumulativeDispersalProbability) {
                     infectedSitesList.Add((healthySite.x, healthySite.y));
-                    sitesForProportioning[SiteVars.CalculateCoordinatesToIndex(healthySite.x - 1, healthySite.y - 1, landscapeX)] = true;
+                    sitesForProportioning[CalculateCoordinatesToIndex(healthySite.x - 1, healthySite.y - 1, landscapeX)] = true;
                 }
             }
             stopwatch1.Stop();
@@ -273,7 +275,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             Dictionary<ISpecies, Dictionary<ushort, int>> newSiteCohortsDictionary = new Dictionary<ISpecies, Dictionary<ushort, int>>();
             foreach (ActiveSite site in sites) {
                 Location siteLocation = site.Location;
-                if (!sitesForProportioning[SiteVars.CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX)]) continue;
+                if (!sitesForProportioning[CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX)]) continue;
                 SiteCohorts siteCohorts = SiteVars.Cohorts[site];
 
                 if (debugDumpSiteInformation) {
