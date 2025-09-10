@@ -84,8 +84,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             bool debugOutputInfectionStateCounts = true;
             ////////
             
-            int dispersalProbabilityMatrixWidth = DispersalProbabilityMatrixWidth;
-            int dispersalProbabilityMatrixHeight = DispersalProbabilityMatrixHeight;
+            int distanceDispersalDecayMatrixWidth = DistanceDispersalDecayMatrixWidth;
+            int distanceDispersalDecayMatrixHeight = DistanceDispersalDecayMatrixHeight;
             IEnumerable<ActiveSite> sites = ModelCore.Landscape.ActiveSites;
             (int x, int y) worstCaseMaximumUniformDispersalDistance = GetWorstCaseMaximumUniformDispersalDistance();
             ISpecies derivedHealthySpecies = parameters.DerivedHealthySpecies;
@@ -189,8 +189,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 foreach ((int x, int y) infectedSite in infectedSitesList) {
                     (int x, int y) relativeGridOffset = CalculateRelativeGridOffset(infectedSite.x, infectedSite.y, healthySite.x, healthySite.y);
                     (int x, int y) canonicalizedRelativeGridOffset = CanonicalizeToHalfQuadrant(relativeGridOffset.x, relativeGridOffset.y);
-                    if (canonicalizedRelativeGridOffset.x >= dispersalProbabilityMatrixWidth || canonicalizedRelativeGridOffset.y >= dispersalProbabilityMatrixHeight) continue;
-                    double dispersalProbability = GetDispersalProbability(CalculateCoordinatesToIndex(canonicalizedRelativeGridOffset.x, canonicalizedRelativeGridOffset.y, dispersalProbabilityMatrixWidth));
+                    if (canonicalizedRelativeGridOffset.x >= distanceDispersalDecayMatrixWidth || canonicalizedRelativeGridOffset.y >= distanceDispersalDecayMatrixHeight) continue;
+                    double dispersalProbability = GetDistanceDispersalDecay(CalculateCoordinatesToIndex(canonicalizedRelativeGridOffset.x, canonicalizedRelativeGridOffset.y, distanceDispersalDecayMatrixWidth));
                     cumulativeDispersalProbability += dispersalProbability;
                 }
                 if (cumulativeDispersalProbability == 0.0) continue;

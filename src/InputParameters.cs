@@ -27,7 +27,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             High = high;
         }
     }
-    public enum DispersalProbabilityKernel { PowerLaw, NegativeExponent, SingleAnchoredPowerLaw, DoubleAnchoredPowerLaw };
+    public enum DistanceDispersalDecayKernel { PowerLaw, NegativeExponent, SingleAnchoredPowerLaw, DoubleAnchoredPowerLaw };
     public enum SHIMode { Mean, Max };
     public interface IInputParameters
     {
@@ -37,7 +37,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         List<(ISpecies, double)> GetTransitionMatrixDistribution(ISpecies species);
         bool TransitionMatrixContainsSpecies(ISpecies species);
         ISpecies DerivedHealthySpecies { get; set; }
-        DispersalProbabilityKernel DispersalProbabilityKernel { get; set; }
+        DistanceDispersalDecayKernel DistanceDispersalDecayKernel { get; set; }
         int DispersalMaxDistance { get; set; }
         double AlphaCoefficient { get; set; }
     }
@@ -48,7 +48,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         private Dictionary<ISpecies, List<(ISpecies, double)>> speciesTransitionMatrix;
         private Dictionary<ISpecies, HostIndex> speciesHostIndex;
         private ISpecies derivedHealthySpecies;
-        private DispersalProbabilityKernel dispersalProbabilityKernel;
+        private DistanceDispersalDecayKernel distanceDispersalDecayKernel;
         private int dispersalMaxDistance;
         private double alphaCoefficient;
         public Dictionary<ISpecies, List<(ISpecies, double)>> SpeciesTransitionMatrix
@@ -70,13 +70,13 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
         }
 
-        public DispersalProbabilityKernel DispersalProbabilityKernel
+        public DistanceDispersalDecayKernel DistanceDispersalDecayKernel
         {
             get {
-                return dispersalProbabilityKernel;
+                return distanceDispersalDecayKernel;
             }
             set {
-                dispersalProbabilityKernel = value;
+                distanceDispersalDecayKernel = value;
             }
         }
         public int DispersalMaxDistance

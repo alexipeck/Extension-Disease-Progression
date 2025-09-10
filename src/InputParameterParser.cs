@@ -27,8 +27,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
 
         protected override IInputParameters Parse()
         {
-            Type.SetDescription<DispersalProbabilityKernel>("Dispersal Probability Algorithm");
-            InputValues.Register<DispersalProbabilityKernel>(DispersalProbabilityKernelParser);
+            Type.SetDescription<DistanceDispersalDecayKernel>("Distance Dispersal Decay Kernel");
+            InputValues.Register<DistanceDispersalDecayKernel>(DistanceDispersalDecayKernelParser);
             InputParameters parameters = new InputParameters();
 
             InputVar<int> timestep = new InputVar<int>("Timestep");
@@ -213,10 +213,10 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }            
             PlugIn.ModelCore.UI.WriteLine("Finished reading species matrix file");
 
-            InputVar<DispersalProbabilityKernel> dispersalKernel = new InputVar<DispersalProbabilityKernel>("DispersalProbabilityKernel");
-            ReadVar(dispersalKernel);
-            PlugIn.ModelCore.UI.WriteLine($"Dispersal type: {dispersalKernel.Value}");
-            parameters.DispersalProbabilityKernel = dispersalKernel.Value;
+            InputVar<DistanceDispersalDecayKernel> distanceDispersalDecayKernel = new InputVar<DistanceDispersalDecayKernel>("DistanceDispersalDecayKernel");
+            ReadVar(distanceDispersalDecayKernel);
+            PlugIn.ModelCore.UI.WriteLine($"Dispersal type: {distanceDispersalDecayKernel.Value}");
+            parameters.DistanceDispersalDecayKernel = distanceDispersalDecayKernel.Value;
 
             InputVar<int> dispersalMaximumDistance = new InputVar<int>("DispersalMaximumDistance");
             ReadVar(dispersalMaximumDistance);
@@ -231,16 +231,16 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             return parameters;
         }
 
-        public static DispersalProbabilityKernel DispersalProbabilityKernelParser(string text)
+        public static DistanceDispersalDecayKernel DistanceDispersalDecayKernelParser(string text)
         {
             if (text == "NegativeExponent")
-                return DispersalProbabilityKernel.NegativeExponent;
+                return DistanceDispersalDecayKernel.NegativeExponent;
             else if (text == "PowerLaw")
-                return DispersalProbabilityKernel.PowerLaw;
+                return DistanceDispersalDecayKernel.PowerLaw;
             else if (text == "SingleAnchoredPowerLaw")
-                return DispersalProbabilityKernel.SingleAnchoredPowerLaw;
+                return DistanceDispersalDecayKernel.SingleAnchoredPowerLaw;
             else if (text == "DoubleAnchoredPowerLaw")
-                return DispersalProbabilityKernel.DoubleAnchoredPowerLaw;
+                return DistanceDispersalDecayKernel.DoubleAnchoredPowerLaw;
             throw new System.FormatException("Valid kernels: NegativeExponent, PowerLaw, SingleAnchoredPowerLaw, DoubleAnchoredPowerLaw");
         }
     }
