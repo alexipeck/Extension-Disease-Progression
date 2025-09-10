@@ -44,18 +44,24 @@ try {
 } finally {
     cd $ProjectDir\src\
 }
-
+$framerate = 10
 Write-Output "Turning image sequences into videos..."
-ffmpeg -y -framerate 10 -i "$LandisExecutionDir/infection_timeline/infection_state_%d.png" -c:v libx264 -pix_fmt yuv420p "$LandisExecutionDir/infection_timeline.mp4"
+ffmpeg -y -framerate $framerate -i "$LandisExecutionDir/infection_timeline/infection_state_%d.png" -c:v libx264 -pix_fmt yuv420p "$LandisExecutionDir/infection_timeline.mp4"
 Write-Output "Video saved to: $LandisExecutionDir/infection_timeline.mp4"
-ffmpeg -y -framerate 10 -i "$LandisExecutionDir/shi_timeline/shi_state_%d.png" -c:v libx264 -pix_fmt yuv420p "$LandisExecutionDir/shi_timeline.mp4"
-Write-Output "Video saved to: $LandisExecutionDir/shi_timeline.mp4"
-ffmpeg -y -framerate 10 -i "$LandisExecutionDir/shim_timeline/shim_state_%d.png" -c:v libx264 -pix_fmt yuv420p "$LandisExecutionDir/shim_timeline.mp4"
+ffmpeg -y -framerate $framerate -i "$LandisExecutionDir/shim_timeline/shim_state_%d.png" -c:v libx264 -pix_fmt yuv420p "$LandisExecutionDir/shim_timeline.mp4"
 Write-Output "Video saved to: $LandisExecutionDir/shim_timeline.mp4"
-ffmpeg -y -framerate 10 -i "$LandisExecutionDir/shim_normalized_timeline/shim_normalized_state_%d.png" -c:v libx264 -pix_fmt yuv420p "$LandisExecutionDir/shim_normalized_timeline.mp4"
+ffmpeg -y -framerate $framerate -i "$LandisExecutionDir/shim_normalized_timeline/shim_normalized_state_%d.png" -c:v libx264 -pix_fmt yuv420p "$LandisExecutionDir/shim_normalized_timeline.mp4"
 Write-Output "Video saved to: $LandisExecutionDir/shim_normalized_timeline.mp4"
-ffmpeg -y -framerate 10 -i "$LandisExecutionDir/foi_timeline/foi_state_%d.png" -c:v libx264 -pix_fmt yuv420p "$LandisExecutionDir/foi_timeline.mp4"
+ffmpeg -y -framerate $framerate -i "$LandisExecutionDir/foi_timeline/foi_state_%d.png" -c:v libx264 -pix_fmt yuv420p "$LandisExecutionDir/foi_timeline.mp4"
 Write-Output "Video saved to: $LandisExecutionDir/foi_timeline.mp4"
+ffmpeg -y -i "$LandisExecutionDir/infection_timeline.mp4" -i "$LandisExecutionDir/shim_timeline.mp4" -i "$LandisExecutionDir/shim_normalized_timeline.mp4" -i "$LandisExecutionDir/foi_timeline.mp4" `
+-filter_complex "[0:v]scale=1200:1200[v0]; `
+[1:v]scale=1200:1200[v1]; `
+[2:v]scale=1200:1200[v2]; `
+[3:v]scale=1200:1200[v3]; `
+[v0][v1][v2][v3]xstack=inputs=4:layout=0_0|1200_0|0_1200|1200_1200[out]" `
+-map "[out]" -c:v libx264 -pix_fmt yuv420p "$LandisExecutionDir/quad_view.mp4"
+
 
 Write-Output "Creating filtered console output..."
 $consoleOutputPath = "$LandisExecutionDir\console-output.txt"

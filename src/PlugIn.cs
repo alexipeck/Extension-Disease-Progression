@@ -6,11 +6,10 @@ using System.Dynamic;
 using Landis.Library.UniversalCohorts;
 using System.Diagnostics;
 using System;
-using System.Drawing;
-using System.Drawing.Imaging;
 using System.Threading.Tasks;
 using Landis.Library.Succession;
 using static Landis.Extension.Disturbance.DiseaseProgression.Auxiliary;
+using static Landis.Extension.Disturbance.DiseaseProgression.SiteVars;
 
 namespace Landis.Extension.Disturbance.DiseaseProgression
 {
@@ -21,6 +20,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         public static readonly string ExtensionName = "Disease Progression";
         private static ICore modelCore;
         private IInputParameters parameters;
+        
         //---------------------------------------------------------------------
 
         public PlugIn()
@@ -81,21 +81,22 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             //TODO: Image generation gets started in another thread
             //      I need a boolean check to ensure that the thread has stopped
             //      The thread is needed as is can save something like 7 steps per timestep
-            bool debugInfectionStatusOutput = true;
             bool debugOutputInfectionStateCounts = true;
             ////////
             
-            int landscapeX = SiteVars.LandscapeDimensions.x;
-            int landscapeY = SiteVars.LandscapeDimensions.y;
-            int landscapeSize = landscapeX * landscapeY;
-            int dispersalProbabilityMatrixWidth = SiteVars.DispersalProbabilityMatrixWidth;
-            int dispersalProbabilityMatrixHeight = SiteVars.DispersalProbabilityMatrixHeight;
+            int dispersalProbabilityMatrixWidth = DispersalProbabilityMatrixWidth;
+            int dispersalProbabilityMatrixHeight = DispersalProbabilityMatrixHeight;
             IEnumerable<ActiveSite> sites = ModelCore.Landscape.ActiveSites;
-            (int x, int y) worstCaseMaximumUniformDispersalDistance = SiteVars.GetWorstCaseMaximumUniformDispersalDistance();
+            (int x, int y) worstCaseMaximumUniformDispersalDistance = GetWorstCaseMaximumUniformDispersalDistance();
             ISpecies derivedHealthySpecies = parameters.DerivedHealthySpecies;
 
+            int landscapeX = LandscapeDimensions.x;
+            int landscapeY = LandscapeDimensions.y;
+            int landscapeSize = landscapeX * landscapeY;
+
             ////////Resprouting TODO: REWORK
-            int[] resproutLifetime = SiteVars.ResproutLifetime;
+            int[] resproutLifetime = ResproutLifetime;
+            
             bool[] willResprout = new bool[landscapeSize];
             for (int x = 0; x < landscapeX; x++) {
                 for (int y = 0; y < landscapeY; y++) {
@@ -107,7 +108,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     }
                 }
             }
-            SiteVars.DecrementResproutLifetimes();
+            DecrementResproutLifetimes();
             foreach (ActiveSite site in sites) {
                 Location siteLocation = site.Location;
                 if (!willResprout[CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX)]) continue;
@@ -115,25 +116,37 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
             ////////
 
+            (bool[] sitesForProportioning, 
+             List<(int x, int y)> healthySitesList, 
+             List<(int x, int y)> infectedSitesList, 
+             List<(int x, int y)> ignoredSitesList,
+             List<int> healthySitesListIndices,
+             List<int> infectedSitesListIndices,
+             List<int> ignoredSitesListIndices) = 
+                InfectionStateDetection(sites, parameters, landscapeX, landscapeSize);
+
+            if (Timestep == 1) {
+                //set default probabilities from infection state
+                SetDefaultProbabilities(healthySitesListIndices, infectedSitesListIndices);
+            } else {
+                //modify probabilities based on their difference from previous timestep
+                //if a site which was infected last timestep no longer is, set it back to 1 for susceptible, 0 for the others
+                //I'm unsure if I need to track when a healthy becomes infected because it's handled only within this process
+                //do we want to say that when a site is infected, that it's probability should be reset back to 1
+                //or do we leave it to dynamically change based existing math?
+            }
+
             Stopwatch stopwatch = new Stopwatch();
             stopwatch.Start();
             
             double[] SHIM = new double[landscapeSize];
-            bool[] sitesForProportioning = new bool[landscapeSize];
-            //TODO: Might be able to decommission these soon
-            List<(int x, int y)> healthySitesList = new List<(int x, int y)>();
-            List<(int x, int y)> infectedSitesList = new List<(int x, int y)>();
-            List<(int x, int y)> ignoredSitesList = new List<(int x, int y)>();
-            List<int> healthySitesListIndices = new List<int>();
-            List<int> infectedSitesListIndices = new List<int>();
-            List<int> ignoredSitesListIndices = new List<int>();
 
             ////////calculate SHI & SHIM
             double SHIMSum = 0.0;
             foreach (ActiveSite site in sites) {
                 Location siteLocation = site.Location;
                 int index = CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX);
-                double SHI = (int)SiteVars.CalculateSiteHostIndex(site);
+                double SHI = (int)CalculateSiteHostIndex(site);
                 //TODO: Add land type modifier (LTM) and summed disturbance modifiers
                 IEcoregion ecoregion = ModelCore.Ecoregion[site];
                 SHIM[index] = CalculateSiteHostIndexModified(SHI, 0.0, 0.0);
@@ -144,84 +157,16 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             
             double SHIMMean = SHIMSum / ModelCore.Landscape.ActiveSiteCount;
             for (int i = 0; i < landscapeSize; i++) {
-                //TODO: Consider adding a branch to skip if SHIM[i] isn't more than 0, but mathematically running it on 0 is fine
+                //TODO: Consider adding a branch to skip if SHIM[i] isn't more
+                //      than 0 but mathematically it's fine unless SHIMMean is 0
                 SHIM[i] /= SHIMMean;
             }
 
             
             ExportBitmap(SHIM, "./shim_normalized_timeline/shim_normalized_state", "SHI Normalized");
-            
-            // infection detection & adjustment pass
-            foreach (ActiveSite site in sites) {
-                bool containsHealthySpecies = false;
-                bool containsInfectedSpecies = false;
-                foreach (ISpeciesCohorts speciesCohorts in SiteVars.Cohorts[site]) {
-                    if (speciesCohorts.Species == parameters.DerivedHealthySpecies) {
-                        containsHealthySpecies = true;
-                    } else if (parameters.TransitionMatrixContainsSpecies(speciesCohorts.Species)) {
-                        containsInfectedSpecies = true;
-                    }
-                }
-                Location siteLocation = site.Location;
-                int index = CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX);
-                if (containsHealthySpecies && !containsInfectedSpecies) {
-                    healthySitesList.Add((siteLocation.Column, siteLocation.Row));
-                    healthySitesListIndices.Add(index);
-                } else if (containsInfectedSpecies) {
-                    infectedSitesList.Add((siteLocation.Column, siteLocation.Row));
-                    infectedSitesListIndices.Add(index);
-                    sitesForProportioning[index] = true;
-                } else {
-                    ignoredSitesList.Add((siteLocation.Column, siteLocation.Row));
-                    ignoredSitesListIndices.Add(index);
-                }
-            }
 
-            /* if (debugPerformTiming) {
-                ModelCore.UI.WriteLine($"Infection detection finished: {stopwatch.ElapsedMilliseconds} ms");
-            } */
-
-            if (debugInfectionStatusOutput) {
-                List<(int x, int y)> healthySitesListCopy = new List<(int x, int y)>(healthySitesList);
-                List<(int x, int y)> infectedSitesListCopy = new List<(int x, int y)>(infectedSitesList);
-                List<(int x, int y)> ignoredSitesListCopy = new List<(int x, int y)>(ignoredSitesList);
-                
-                Task.Run(() => {
-                    Stopwatch outputStopwatch = new Stopwatch();
-                    outputStopwatch.Start();
-                    try {
-                        string outputPath = $"./infection_timeline/infection_state_{modelCore.CurrentTime}.png";
-                        SiteVars.GenerateInfectionStateBitmap(outputPath, healthySitesListCopy, infectedSitesListCopy, ignoredSitesListCopy);
-                    }
-                    catch (Exception ex) {
-                        ModelCore.UI.WriteLine($"Debug bitmap generation failed: {ex.Message}");
-                        throw;
-                    }
-                    outputStopwatch.Stop();
-                    ModelCore.UI.WriteLine($"      Finished outputting infection state: {outputStopwatch.ElapsedMilliseconds} ms");
-                });
-            }
-
-            //////// PRIMARY CALCULATION
-            double[] FOI = new double[landscapeSize];
-            for (int i = 0; i < landscapeSize; i++) {
-                double sum = 0.0;
-                (int x, int y) targetCoordinates = CalculateIndexToCoordinates(i, landscapeX);
-                for (int j = 0; j < landscapeSize; j++) {
-                    if (i == j) continue;
-                    (int x, int y) sourceCoordinates = CalculateIndexToCoordinates(j, landscapeX);
-                    (int x, int y) relativeCoordinates = CalculateRelativeGridOffset(targetCoordinates.x, targetCoordinates.y, sourceCoordinates.x, sourceCoordinates.y);
-                    (int x, int y) canonicalizedRelativeCoordinates = CanonicalizeToHalfQuadrant(relativeCoordinates.x, relativeCoordinates.y);
-                    double decay = SiteVars.GetDispersalProbability(CalculateCoordinatesToIndex(canonicalizedRelativeCoordinates.x, canonicalizedRelativeCoordinates.y, dispersalProbabilityMatrixWidth));
-                    sum += SHIM[i]
-                        * SHIM[j]
-                        /* * Source Infection Probability Index */
-                        * decay;
-                }
-                FOI[i] = 
-                    /* Transmission & Weather Index * */
-                    sum;
-            }
+            //////// Force of Infection
+            double[] FOI = CalculateForceOfInfection(landscapeX, landscapeSize, SHIM);
             ExportBitmap(FOI, "./foi_timeline/foi_state", "FOI");
             ////////
             
@@ -245,7 +190,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     (int x, int y) relativeGridOffset = CalculateRelativeGridOffset(infectedSite.x, infectedSite.y, healthySite.x, healthySite.y);
                     (int x, int y) canonicalizedRelativeGridOffset = CanonicalizeToHalfQuadrant(relativeGridOffset.x, relativeGridOffset.y);
                     if (canonicalizedRelativeGridOffset.x >= dispersalProbabilityMatrixWidth || canonicalizedRelativeGridOffset.y >= dispersalProbabilityMatrixHeight) continue;
-                    double dispersalProbability = SiteVars.GetDispersalProbability(CalculateCoordinatesToIndex(canonicalizedRelativeGridOffset.x, canonicalizedRelativeGridOffset.y, dispersalProbabilityMatrixWidth));
+                    double dispersalProbability = GetDispersalProbability(CalculateCoordinatesToIndex(canonicalizedRelativeGridOffset.x, canonicalizedRelativeGridOffset.y, dispersalProbabilityMatrixWidth));
                     cumulativeDispersalProbability += dispersalProbability;
                 }
                 if (cumulativeDispersalProbability == 0.0) continue;
@@ -345,10 +290,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                                     if (debugOutputTransitions) {
                                         ModelCore.UI.WriteLine($"Transitioned to dead: Age: {concreteCohort.Data.Age}, Biomass: {concreteCohort.Data.Biomass}, Species: {speciesCohorts.Species.Name}");
                                     }
-                                    SiteVars.AddResproutLifetime(siteLocation.Row - 1, siteLocation.Column - 1);
+                                    AddResproutLifetime(siteLocation.Row - 1, siteLocation.Column - 1);
                                     continue; //short-circuit
                                 }
-                                //ISpecies targetSpecies = SiteVars.GetISpecies(species);
 
                                 //push biomass to target species cohort
                                 if (!newSiteCohortsDictionary.ContainsKey(targetSpecies)) {
@@ -405,29 +349,70 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             stopwatch.Stop();
             ModelCore.UI.WriteLine($"Finished proportioning all sites: {stopwatch.ElapsedMilliseconds} ms");
         }
-
-
-
-        public override void AddCohortData() { return; }
-
-        private static void ExportBitmap(double[] data, string filePathPrefix, string label)
-        {
-            double[] dataCopy = new double[data.Length];
-            Array.Copy(data, dataCopy, data.Length);
-            Task.Run(() => {
-                Stopwatch outputStopwatch = new Stopwatch();
-                outputStopwatch.Start();
-                try {
-                    string outputPath = $"{filePathPrefix}_{modelCore.CurrentTime}.png";
-                    SiteVars.GenerateSHIStateBitmap(outputPath, dataCopy);
+        private static (bool[] sitesForProportioning, 
+                        List<(int x, int y)> healthySitesList, 
+                        List<(int x, int y)> infectedSitesList, 
+                        List<(int x, int y)> ignoredSitesList,
+                        List<int> healthySitesListIndices,
+                        List<int> infectedSitesListIndices,
+                        List<int> ignoredSitesListIndices) 
+        InfectionStateDetection(IEnumerable<ActiveSite> sites, IInputParameters parameters, int landscapeX, int landscapeSize) {
+            bool[] sitesForProportioning = new bool[landscapeSize];
+            List<(int x, int y)> healthySitesList = new List<(int x, int y)>();
+            List<(int x, int y)> infectedSitesList = new List<(int x, int y)>();
+            List<(int x, int y)> ignoredSitesList = new List<(int x, int y)>();
+            List<int> healthySitesListIndices = new List<int>();
+            List<int> infectedSitesListIndices = new List<int>();
+            List<int> ignoredSitesListIndices = new List<int>();
+            foreach (ActiveSite site in sites) {
+                bool containsHealthySpecies = false;
+                bool containsInfectedSpecies = false;
+                foreach (ISpeciesCohorts speciesCohorts in SiteVars.Cohorts[site]) {
+                    if (speciesCohorts.Species == parameters.DerivedHealthySpecies) {
+                        containsHealthySpecies = true;
+                    } else if (parameters.TransitionMatrixContainsSpecies(speciesCohorts.Species)) {
+                        containsInfectedSpecies = true;
+                    }
                 }
-                catch (Exception ex) {
-                    ModelCore.UI.WriteLine($"Debug bitmap generation failed: {ex.Message}");
-                    throw;
+                Location siteLocation = site.Location;
+                int index = CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX);
+                if (containsHealthySpecies && !containsInfectedSpecies) {
+                    healthySitesList.Add((siteLocation.Column, siteLocation.Row));
+                    healthySitesListIndices.Add(index);
+                } else if (containsInfectedSpecies) {
+                    infectedSitesList.Add((siteLocation.Column, siteLocation.Row));
+                    infectedSitesListIndices.Add(index);
+                    sitesForProportioning[index] = true;
+                } else {
+                    ignoredSitesList.Add((siteLocation.Column, siteLocation.Row));
+                    ignoredSitesListIndices.Add(index);
                 }
-                outputStopwatch.Stop();
-                ModelCore.UI.WriteLine($"      Finished outputting {label} state: {outputStopwatch.ElapsedMilliseconds} ms");
-            });
+            }
+
+            {
+                List<(int x, int y)> healthySitesListCopy = new List<(int x, int y)>(healthySitesList);
+                List<(int x, int y)> infectedSitesListCopy = new List<(int x, int y)>(infectedSitesList);
+                List<(int x, int y)> ignoredSitesListCopy = new List<(int x, int y)>(ignoredSitesList);
+                
+                Task.Run(() => {
+                    Stopwatch outputStopwatch = new Stopwatch();
+                    outputStopwatch.Start();
+                    try {
+                        string outputPath = $"./infection_timeline/infection_state_{modelCore.CurrentTime}.png";
+                        GenerateInfectionStateBitmap(outputPath, healthySitesListCopy, infectedSitesListCopy, ignoredSitesListCopy);
+                    }
+                    catch (Exception ex) {
+                        ModelCore.UI.WriteLine($"Debug bitmap generation failed: {ex.Message}");
+                        throw;
+                    }
+                    outputStopwatch.Stop();
+                    ModelCore.UI.WriteLine($"      Finished outputting infection state: {outputStopwatch.ElapsedMilliseconds} ms");
+                });
+            }
+
+            return (sitesForProportioning, healthySitesList, infectedSitesList, ignoredSitesList,
+                    healthySitesListIndices, infectedSitesListIndices, ignoredSitesListIndices);
         }
+        public override void AddCohortData() { return; }
     }
 }

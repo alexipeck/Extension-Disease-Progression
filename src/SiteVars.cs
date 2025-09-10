@@ -9,6 +9,7 @@ using System.Drawing.Imaging;
 using System.Linq;
 using System.IO;
 using static Landis.Extension.Disturbance.DiseaseProgression.Auxiliary;
+using Landis.Library.Succession.DemographicSeeding;
 
 namespace Landis.Extension.Disturbance.DiseaseProgression
 {
@@ -26,13 +27,21 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         private static List<(int x, int y)> precalculatedDispersalDistanceOffsets;
         //TODO: Add to input parameters
         private static int resproutMaxLongevity;
+        private static double[] susceptibleProbability;
+        private static double[] infectedProbability;
+        private static double[] diseasedProbability;
+        private static IInputParameters parameters;
         private const int MAX_IMAGE_SIZE = 16384;
-        //private static readonly Dictionary<string, ISpecies> speciesNameToISpecies = new Dictionary<string, ISpecies>();
         private static SHIMode siteHostIndexMode = SHIMode.Mean;
-        public static void Initialize(ICore modelCore, IInputParameters parameters) {
+        public static void Initialize(ICore modelCore, IInputParameters inputParameters) {
+            parameters = inputParameters;
             universalCohorts = PlugIn.ModelCore.GetSiteVar<SiteCohorts>("Succession.UniversalCohorts");
             landscapeDimensions = (PlugIn.ModelCore.Landscape.Dimensions.Columns, PlugIn.ModelCore.Landscape.Dimensions.Rows);
             speciesHostIndex = parameters.SpeciesHostIndex;
+
+            susceptibleProbability = new double[landscapeDimensions.x * landscapeDimensions.y];
+            infectedProbability = new double[landscapeDimensions.x * landscapeDimensions.y];
+            diseasedProbability = new double[landscapeDimensions.x * landscapeDimensions.y];
             /* foreach (var species in PlugIn.ModelCore.Species) {
                 speciesNameToISpecies[species.Name] = species;
             } */
@@ -132,6 +141,52 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             
             if (divisor == 0) return 0.0f;
             return sum / divisor;
+        }
+        public static void SetDefaultProbabilities(List<int> healthySitesListIndices, List<int> infectedSitesListIndices/* , List<int> ignoredSitesListIndices */) {
+            foreach (int index in healthySitesListIndices) {
+                susceptibleProbability[index] = 1.0;
+                infectedProbability[index] = 0.0;
+                diseasedProbability[index] = 0.0;
+            }
+            foreach (int index in infectedSitesListIndices) {
+                susceptibleProbability[index] = 0.0;
+                infectedProbability[index] = 1.0;
+                diseasedProbability[index] = 0.0;
+            }
+        }
+        public static double[] CalculateForceOfInfection(int landscapeX, int landscapeSize, double[] SHIM) {
+            int timeStep = parameters.Timestep;
+            double diseaseProgressionRatePerUnitTime = 0.02;
+            double[] FOI = new double[landscapeSize];
+            double[] susceptibleProbabilityNew = new double[landscapeSize];
+            double[] infectedProbabilityNew = new double[landscapeSize];
+            double[] diseasedProbabilityNew = new double[landscapeSize];
+            for (int i = 0; i < landscapeSize; i++) {
+                double sum = 0.0;
+                (int x, int y) targetCoordinates = CalculateIndexToCoordinates(i, landscapeX);
+                for (int j = 0; j < landscapeSize; j++) {
+                    if (i == j) continue;
+                    (int x, int y) sourceCoordinates = CalculateIndexToCoordinates(j, landscapeX);
+                    (int x, int y) relativeCoordinates = CalculateRelativeGridOffset(targetCoordinates.x, targetCoordinates.y, sourceCoordinates.x, sourceCoordinates.y);
+                    (int x, int y) canonicalizedRelativeCoordinates = CanonicalizeToHalfQuadrant(relativeCoordinates.x, relativeCoordinates.y);
+                    double decay = GetDispersalProbability(CalculateCoordinatesToIndex(canonicalizedRelativeCoordinates.x, canonicalizedRelativeCoordinates.y, dispersalProbabilityMatrixWidth));
+                    sum += SHIM[i]
+                        * SHIM[j]
+                        /* * Source Infection Probability Index */
+                        * (infectedProbability[j] + diseasedProbability[j])
+                        * decay;
+                }
+                FOI[i] = 
+                    /* Transmission & Weather Index * */
+                    sum;
+                susceptibleProbabilityNew[i] = susceptibleProbability[i] - (FOI[i] * susceptibleProbability[i] * timeStep);
+                infectedProbabilityNew[i] = infectedProbability[i] + ((FOI[i] * susceptibleProbability[i] * timeStep) - (diseaseProgressionRatePerUnitTime * (infectedProbability[i] * timeStep)));
+                diseasedProbabilityNew[i] = diseasedProbability[i] + (diseaseProgressionRatePerUnitTime * infectedProbability[i] * timeStep);
+            }
+            susceptibleProbability = susceptibleProbabilityNew;
+            infectedProbability = infectedProbabilityNew;
+            diseasedProbability = diseasedProbabilityNew;
+            return FOI;
         }
         public static double CalculateSiteHostIndexMax(ActiveSite site) {
             double maxScore = 0.0;

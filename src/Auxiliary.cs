@@ -1,6 +1,8 @@
 
 
 using System;
+using System.Diagnostics;
+using System.Threading.Tasks;
 
 namespace Landis.Extension.Disturbance.DiseaseProgression {
     public static class Auxiliary {
@@ -53,5 +55,23 @@ namespace Landis.Extension.Disturbance.DiseaseProgression {
             int ay = y < 0 ? -y : y;
             return ax >= ay ? (ax, ay) : (ay, ax);
         } */
+        public static void ExportBitmap(double[] data, string filePathPrefix, string label) {
+            double[] dataCopy = new double[data.Length];
+            Array.Copy(data, dataCopy, data.Length);
+            Task.Run(() => {
+                Stopwatch outputStopwatch = new Stopwatch();
+                outputStopwatch.Start();
+                try {
+                    string outputPath = $"{filePathPrefix}_{PlugIn.ModelCore.CurrentTime}.png";
+                    SiteVars.GenerateSHIStateBitmap(outputPath, dataCopy);
+                }
+                catch (Exception ex) {
+                    PlugIn.ModelCore.UI.WriteLine($"Debug bitmap generation failed: {ex.Message}");
+                    throw;
+                }
+                outputStopwatch.Stop();
+                PlugIn.ModelCore.UI.WriteLine($"      Finished outputting {label} state: {outputStopwatch.ElapsedMilliseconds} ms");
+            });
+        }
     }
 }
