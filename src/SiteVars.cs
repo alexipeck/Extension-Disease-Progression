@@ -43,9 +43,6 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             susceptibleProbability = new double[landscapeDimensions.x * landscapeDimensions.y];
             infectedProbability = new double[landscapeDimensions.x * landscapeDimensions.y];
             diseasedProbability = new double[landscapeDimensions.x * landscapeDimensions.y];
-            /* foreach (var species in PlugIn.ModelCore.Species) {
-                speciesNameToISpecies[species.Name] = species;
-            } */
 
             int worstCaseMaximumDispersalCellDistanceX = (int)Math.Ceiling(parameters.DispersalMaxDistance / PlugIn.ModelCore.CellLength);
             worstCaseMaximumDispersalCellDistance = (worstCaseMaximumDispersalCellDistanceX, (int)(worstCaseMaximumDispersalCellDistanceX * 0.7071067812) + 1);
@@ -291,32 +288,6 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     throw new ArgumentException($"Dispersal type {dispersalKernel} not supported");
             }
         }
-        /* private static double CalculateDispersalProbability(DispersalProbabilityKernel dispersalKernel, double distance, double alphaCoefficient, float cellLength, float cellArea) {
-            if (distance == 0.0) {
-                return 0.0;
-            }
-            double density;
-            switch(dispersalKernel) {
-                case DispersalProbabilityKernel.PowerLaw:
-                    if (alphaCoefficient <= 0.0) return 0.0;
-                    density = (alphaCoefficient * alphaCoefficient) / (2.0 * Math.PI) * Math.Pow(distance, -alphaCoefficient);
-                    break;
-                case DispersalProbabilityKernel.NegativeExponent:
-                    double softeningLength = 0.5 * cellLength;
-                    double normalization = ((alphaCoefficient - 1.0) * (alphaCoefficient - 2.0)) / (2.0 * Math.PI * softeningLength * softeningLength);
-                    density = normalization * Math.Exp(-alphaCoefficient * distance / softeningLength);
-                    break;
-                case DispersalProbabilityKernel.InverseSquare:
-                    density = Math.Pow(PlugIn.ModelCore.CellLength / distance, 2);
-                    break;
-                default:
-                    throw new ArgumentException($"Dispersal type {dispersalKernel} not supported");
-            }
-            double probability = density * cellArea;
-            if (probability < 0.0) probability = 0.0;
-            if (probability > 1.0) probability = 1.0;
-            return probability;
-        } */
 
         public static ISiteVar<SiteCohorts> Cohorts
         {

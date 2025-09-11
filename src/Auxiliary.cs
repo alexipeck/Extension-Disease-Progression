@@ -36,7 +36,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression {
         public static double CalculateSiteHostIndexModified(double siteHostIndex, double landTypeModifier, double disturbanceModifiersSum) {
             return siteHostIndex + landTypeModifier + disturbanceModifiersSum;
         }
-        public static (int x, int y) CanonicalizeToHalfQuadrant(int x, int y) {
+        /* public static (int x, int y) CanonicalizeToHalfQuadrant(int x, int y) {
             int sx = x < 0 ? 1 : 0;
             int sy = y < 0 ? 1 : 0;
             int k = ((sy - sx) + 2 * (sx & sy)) & 3;
@@ -49,12 +49,12 @@ namespace Landis.Extension.Disturbance.DiseaseProgression {
             }
             if (q1.y > q1.x) return (q1.y, q1.x);
             return q1;
-        }
-        /* public static (int x, int y) CanonicalizeToHalfQuadrant(int x, int y) {
+        } */
+        public static (int x, int y) CanonicalizeToHalfQuadrant(int x, int y) {
             int ax = x < 0 ? -x : x;
             int ay = y < 0 ? -y : y;
             return ax >= ay ? (ax, ay) : (ay, ax);
-        } */
+        }
         public static void ExportBitmap(double[] data, string filePathPrefix, string label) {
             double[] dataCopy = new double[data.Length];
             Array.Copy(data, dataCopy, data.Length);
