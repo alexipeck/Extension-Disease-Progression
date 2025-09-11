@@ -82,7 +82,6 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             //TODO: Image generation gets started in another thread
             //      I need a boolean check to ensure that the thread has stopped
             //      The thread is needed as is can save something like 7 steps per timestep
-            bool debugOutputInfectionStateCounts = true;
             ////////
             
             int distanceDispersalDecayMatrixWidth = DistanceDispersalDecayMatrixWidth;
@@ -126,6 +125,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 //set default probabilities from infection state
                 SetDefaultProbabilities(healthySitesListIndices, infectedSitesListIndices, ignoredSitesListIndices);
             } else {
+                EnforceInfectedProbability(infectedSitesListIndices);
                 //modify probabilities based on their difference from previous timestep
                 //if a site which was infected last timestep no longer is, set it back to 1 for susceptible, 0 for the others
                 //I'm unsure if I need to track when a healthy becomes infected because it's handled only within this process

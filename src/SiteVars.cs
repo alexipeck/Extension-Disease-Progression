@@ -34,6 +34,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         private static IInputParameters parameters;
         private const int MAX_IMAGE_SIZE = 16384;
         private static SHIMode siteHostIndexMode = SHIMode.Mean;
+        private static bool[] wasInfectedLastTimestep;
         public static void Initialize(ICore modelCore, IInputParameters inputParameters) {
             parameters = inputParameters;
             universalCohorts = PlugIn.ModelCore.GetSiteVar<SiteCohorts>("Succession.UniversalCohorts");
@@ -141,6 +142,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             return sum / divisor;
         }
         public static void SetDefaultProbabilities(List<int> healthySitesListIndices, List<int> infectedSitesListIndices, List<int> ignoredSitesListIndices) {
+            bool[] infected = new bool[landscapeDimensions.x * landscapeDimensions.y];
             foreach (int index in healthySitesListIndices) {
                 susceptibleProbability[index] = 1.0;
                 infectedProbability[index] = 0.0;
@@ -150,12 +152,34 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 susceptibleProbability[index] = 0.0;
                 infectedProbability[index] = 1.0;
                 diseasedProbability[index] = 0.0;
+                infected[index] = true;
             }
             foreach (int index in ignoredSitesListIndices) {
                 susceptibleProbability[index] = 1.0;
                 infectedProbability[index] = 0.0;
                 diseasedProbability[index] = 0.0;
             }
+            wasInfectedLastTimestep = infected;
+        }
+
+        public static void EnforceInfectedProbability(List<int> infectedSitesListIndices) {
+            int landscapeSize = LandscapeDimensions.x * LandscapeDimensions.y;
+            bool[] infected = new bool[landscapeSize];
+            foreach (int index in infectedSitesListIndices) {
+                infected[index] = true;
+            }
+            for (int i = 0; i < landscapeSize; i++) {
+                if (wasInfectedLastTimestep[i] && !infected[i]) {
+                    susceptibleProbability[i] = 1.0;
+                    infectedProbability[i] = 0.0;
+                    diseasedProbability[i] = 0.0;
+                } else if (!wasInfectedLastTimestep[i] && infected[i]) {
+                    susceptibleProbability[i] = 0.0;
+                    infectedProbability[i] = 1.0;
+                    diseasedProbability[i] = 0.0;
+                }                
+            }
+            wasInfectedLastTimestep = infected;
         }
         public static double[] CalculateForceOfInfection(int landscapeX, int landscapeSize, double[] SHIM) {
             int timeStep = parameters.Timestep;
