@@ -127,7 +127,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
 
             if (Timestep == 1) {
                 //set default probabilities from infection state
-                SetDefaultProbabilities(healthySitesListIndices, infectedSitesListIndices);
+                SetDefaultProbabilities(healthySitesListIndices, infectedSitesListIndices, ignoredSitesListIndices);
             } else {
                 //modify probabilities based on their difference from previous timestep
                 //if a site which was infected last timestep no longer is, set it back to 1 for susceptible, 0 for the others
@@ -170,8 +170,6 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             ExportBitmap(FOI, "./foi_timeline/foi_state", "FOI");
             ////////
             
-            //int numberOfInfectedSitesBeforeDispersal = infectedSitesList.Count;
-
             // compute relative site positions
             // compute cumulative probability of infection
             // TODO: This method may not agree with the data we have for infection
@@ -183,9 +181,15 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             // site to determine whether it becomes infected.
             Stopwatch stopwatch1 = new Stopwatch();
             stopwatch1.Start();
-            List<(int x, int y, double cumulativeDispersalProbability)> healthySiteCumulativeDispersalProbabilities = new List<(int x, int y, double cumulativeDispersalProbability)>();
-            foreach ((int x, int y) healthySite in healthySitesList) {
-                double cumulativeDispersalProbability = 0.0;
+            //List<(int x, int y, double cumulativeDispersalProbability)> healthySiteCumulativeDispersalProbabilities = new List<(int x, int y, double cumulativeDispersalProbability)>();
+            foreach (int healthySiteIndex in healthySitesListIndices) {
+                Random rand = new Random();
+                double random = rand.NextDouble();
+                if (random <= FOI[healthySiteIndex]) {
+                    //infectedSitesList.Add((healthySite.x, healthySite.y));
+                    sitesForProportioning[healthySiteIndex/* CalculateCoordinatesToIndex(healthySite.x - 1, healthySite.y - 1, landscapeX) */] = true;
+                }
+                /* double cumulativeDispersalProbability = 0.0;
                 foreach ((int x, int y) infectedSite in infectedSitesList) {
                     (int x, int y) relativeGridOffset = CalculateRelativeGridOffset(infectedSite.x, infectedSite.y, healthySite.x, healthySite.y);
                     (int x, int y) canonicalizedRelativeGridOffset = CanonicalizeToHalfQuadrant(relativeGridOffset.x, relativeGridOffset.y);
@@ -194,16 +198,16 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     cumulativeDispersalProbability += dispersalProbability;
                 }
                 if (cumulativeDispersalProbability == 0.0) continue;
-                healthySiteCumulativeDispersalProbabilities.Add((healthySite.x, healthySite.y, cumulativeDispersalProbability));
+                healthySiteCumulativeDispersalProbabilities.Add((healthySite.x, healthySite.y, cumulativeDispersalProbability)); */
             }
-            foreach ((int x, int y, double cumulativeDispersalProbability) healthySite in healthySiteCumulativeDispersalProbabilities) {
+            /* foreach ((int x, int y, double cumulativeDispersalProbability) healthySite in healthySiteCumulativeDispersalProbabilities) {
                 Random rand = new Random();
                 double random = rand.NextDouble();
                 if (random <= healthySite.cumulativeDispersalProbability) {
                     infectedSitesList.Add((healthySite.x, healthySite.y));
                     sitesForProportioning[CalculateCoordinatesToIndex(healthySite.x - 1, healthySite.y - 1, landscapeX)] = true;
                 }
-            }
+            } */
             stopwatch1.Stop();
             ModelCore.UI.WriteLine($"TIMING: {stopwatch1.ElapsedMilliseconds} ms");
             

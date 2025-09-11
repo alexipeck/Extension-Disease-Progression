@@ -10,6 +10,7 @@ using System.Linq;
 using System.IO;
 using static Landis.Extension.Disturbance.DiseaseProgression.Auxiliary;
 using Landis.Library.Succession.DemographicSeeding;
+using System.Threading.Tasks;
 
 namespace Landis.Extension.Disturbance.DiseaseProgression
 {
@@ -142,7 +143,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             if (divisor == 0) return 0.0f;
             return sum / divisor;
         }
-        public static void SetDefaultProbabilities(List<int> healthySitesListIndices, List<int> infectedSitesListIndices/* , List<int> ignoredSitesListIndices */) {
+        public static void SetDefaultProbabilities(List<int> healthySitesListIndices, List<int> infectedSitesListIndices, List<int> ignoredSitesListIndices) {
             foreach (int index in healthySitesListIndices) {
                 susceptibleProbability[index] = 1.0;
                 infectedProbability[index] = 0.0;
@@ -153,14 +154,21 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 infectedProbability[index] = 1.0;
                 diseasedProbability[index] = 0.0;
             }
+            foreach (int index in ignoredSitesListIndices) {
+                susceptibleProbability[index] = 1.0;
+                infectedProbability[index] = 0.0;
+                diseasedProbability[index] = 0.0;
+            }
         }
         public static double[] CalculateForceOfInfection(int landscapeX, int landscapeSize, double[] SHIM) {
             int timeStep = parameters.Timestep;
+            //TODO: Needs to be passed in by the config file
             double diseaseProgressionRatePerUnitTime = 0.02;
             double[] FOI = new double[landscapeSize];
             double[] susceptibleProbabilityNew = new double[landscapeSize];
             double[] infectedProbabilityNew = new double[landscapeSize];
             double[] diseasedProbabilityNew = new double[landscapeSize];
+            //Parallel.For(0, landscapeSize, i => {
             for (int i = 0; i < landscapeSize; i++) {
                 double sum = 0.0;
                 (int x, int y) targetCoordinates = CalculateIndexToCoordinates(i, landscapeX);
@@ -169,7 +177,11 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     (int x, int y) sourceCoordinates = CalculateIndexToCoordinates(j, landscapeX);
                     (int x, int y) relativeCoordinates = CalculateRelativeGridOffset(targetCoordinates.x, targetCoordinates.y, sourceCoordinates.x, sourceCoordinates.y);
                     (int x, int y) canonicalizedRelativeCoordinates = CanonicalizeToHalfQuadrant(relativeCoordinates.x, relativeCoordinates.y);
-                    double decay = GetDistanceDispersalDecay(CalculateCoordinatesToIndex(canonicalizedRelativeCoordinates.x, canonicalizedRelativeCoordinates.y, distanceDispersalDecayMatrixWidth));
+                    double decay = 0.0;
+                    if (canonicalizedRelativeCoordinates.x < distanceDispersalDecayMatrixWidth &&
+                        canonicalizedRelativeCoordinates.y < distanceDispersalDecayMatrixHeight) {
+                        decay = GetDistanceDispersalDecay(CalculateCoordinatesToIndex(canonicalizedRelativeCoordinates.x, canonicalizedRelativeCoordinates.y, distanceDispersalDecayMatrixWidth));
+                    }
                     sum += SHIM[i]
                         * SHIM[j]
                         * (infectedProbability[j] + diseasedProbability[j])
@@ -178,11 +190,14 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 FOI[i] = 
                     /* Transmission & Weather Index * */
                     sum;
-                Debug.Assert(susceptibleProbability[i] + infectedProbability[i] + diseasedProbability[i] == 1.0);
+                Trace.Assert(
+                    susceptibleProbability[i] + infectedProbability[i] + diseasedProbability[i] == 1.0,
+                    $"SusceptibleProbability: {susceptibleProbability[i]}, InfectedProbability: {infectedProbability[i]}, DiseasedProbability: {diseasedProbability[i]}, total: {susceptibleProbability[i] + infectedProbability[i] + diseasedProbability[i]}"
+                );
                 susceptibleProbabilityNew[i] = susceptibleProbability[i] - (FOI[i] * susceptibleProbability[i] * timeStep);
                 infectedProbabilityNew[i] = infectedProbability[i] + ((FOI[i] * susceptibleProbability[i] * timeStep) - (diseaseProgressionRatePerUnitTime * (infectedProbability[i] * timeStep)));
                 diseasedProbabilityNew[i] = diseasedProbability[i] + (diseaseProgressionRatePerUnitTime * infectedProbability[i] * timeStep);
-            }
+            }//);
             susceptibleProbability = susceptibleProbabilityNew;
             infectedProbability = infectedProbabilityNew;
             diseasedProbability = diseasedProbabilityNew;
