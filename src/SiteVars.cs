@@ -58,8 +58,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             PlugIn.ModelCore.UI.WriteLine($"Generating dispersal lookup matrix for {LandscapeDimensions.x}x{LandscapeDimensions.y} landscape");
             distanceDispersalDecayMatrixWidth = worstCaseMaximumDispersalCellDistance.x + 1;
             distanceDispersalDecayMatrixHeight = (int)(worstCaseMaximumDispersalCellDistance.x * 0.7071067812) + 1;
-            double alpha = parameters.AlphaCoefficient ?? 1.0;
-            indexOffsetDistanceDispersalDecayMatrix = GenerateDistanceDispersalDecayMatrix(parameters.DistanceDispersalDecayKernel, alpha, PlugIn.ModelCore.CellLength, worstCaseMaximumDispersalCellDistance.x, parameters.DispersalMaxDistance);
+            indexOffsetDistanceDispersalDecayMatrix = GenerateDistanceDispersalDecayMatrix(parameters.DistanceDispersalDecayKernelFunction, PlugIn.ModelCore.CellLength, worstCaseMaximumDispersalCellDistance.x, parameters.DispersalMaxDistance);
             PlugIn.ModelCore.UI.WriteLine("Generating dispersal probability matrix image");
             GenerateDistanceDispersalDecayMatrixImage(indexOffsetDistanceDispersalDecayMatrix);
             //TODO: Initializes empty for now, but realistically the spinup cycle should add some sites to this
@@ -259,7 +258,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
 
         
 
-        private static double[] GenerateDistanceDispersalDecayMatrix(DistanceDispersalDecayKernel dispersalKernel, double alphaCoefficient, float cellLength, int maximumDispersalCellDistance, int maximumDispersalDistance) {
+        private static double[] GenerateDistanceDispersalDecayMatrix(IDistanceDispersalDecayKernel kernel, float cellLength, int maximumDispersalCellDistance, int maximumDispersalDistance) {
             double totalProbability = 0.0;
             Debug.Assert(cellLength > 0);
             //float cellArea = cellLength * cellLength;
@@ -275,7 +274,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     //Console.WriteLine($"x: {x}, y: {y}, Distance: {distance}");
                     //if (distance > maximumDispersalDistance && distance < maximumDispersalDistance + 20) Console.WriteLine($"Distance {distance}");
                     if (distance > maximumDispersalDistance) continue;
-                    double probability = CalculateUncorrectedDispersalKernelProbability(dispersalKernel, distance, alphaCoefficient);
+                    double probability = kernel.Compute(distance);
                     dispersalLookupMatrix[CalculateCoordinatesToIndex(x, y, distanceDispersalDecayMatrixWidth)] = probability;
                     dispersalLookupMatrixCount++;
                     if (x == y || x == 0 || y == 0) {
@@ -293,31 +292,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             
             return dispersalLookupMatrix;
         }
-        private static double CalculateUncorrectedDispersalKernelProbability(DistanceDispersalDecayKernel dispersalKernel, double distance, double alphaCoefficient) {
-            switch(dispersalKernel) {
-                case DistanceDispersalDecayKernel.PowerLaw:
-                    return 1 / Math.Pow(distance, alphaCoefficient);
-                case DistanceDispersalDecayKernel.NegativeExponent:
-                    return Math.Exp(-alphaCoefficient * distance);
-                case DistanceDispersalDecayKernel.SingleAnchoredPowerLaw:
-                    double minD = parameters.AnchoredMinDistance ?? PlugIn.ModelCore.CellLength;
-                    double coeff = parameters.AnchoredCoefficient ?? 2.0;
-                    if (distance <= minD) return 1.0;
-                    return Math.Pow(minD / distance, coeff);
-                case DistanceDispersalDecayKernel.DoubleAnchoredPowerLaw:
-                    double p1 = parameters.DoubleAnchoredP1 ?? 1.0;
-                    double p2 = parameters.DoubleAnchoredP2 ?? 0.01;
-                    double d1 = parameters.DoubleAnchoredD1 ?? PlugIn.ModelCore.CellLength;
-                    double d2 = parameters.DoubleAnchoredD2 ?? (worstCaseMaximumDispersalCellDistance.x * PlugIn.ModelCore.CellLength);
-                    if (d1 <= 0 || d2 <= 0 || d2 <= d1) return 0.0;
-                    if (p1 <= 0 || p2 <= 0) return 0.0;
-                    double k = Math.Log(p1 / p2) / Math.Log(d2 / d1);
-                    double a = p1 * Math.Pow(d1, k);
-                    return a * Math.Pow(distance, -k);
-                default:
-                    throw new ArgumentException($"Dispersal type {dispersalKernel} not supported");
-            }
-        }
+        // Removed kernel-specific probability function; computation is delegated to the chosen kernel instance.
 
         public static ISiteVar<SiteCohorts> Cohorts
         {

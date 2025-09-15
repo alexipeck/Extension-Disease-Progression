@@ -39,13 +39,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         ISpecies DerivedHealthySpecies { get; set; }
         DistanceDispersalDecayKernel DistanceDispersalDecayKernel { get; set; }
         int DispersalMaxDistance { get; set; }
-        double? AlphaCoefficient { get; set; }
-        double? AnchoredMinDistance { get; set; }
-        double? AnchoredCoefficient { get; set; }
-        double? DoubleAnchoredP1 { get; set; }
-        double? DoubleAnchoredP2 { get; set; }
-        double? DoubleAnchoredD1 { get; set; }
-        double? DoubleAnchoredD2 { get; set; }
+        IDistanceDispersalDecayKernel DistanceDispersalDecayKernelFunction { get; }
     }
     public class InputParameters
         : IInputParameters
@@ -56,13 +50,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         private ISpecies derivedHealthySpecies;
         private DistanceDispersalDecayKernel distanceDispersalDecayKernel;
         private int dispersalMaxDistance;
-        private double? alphaCoefficient;
-        private double? anchoredMinDistance;
-        private double? anchoredCoefficient;
-        private double? doubleAnchoredP1;
-        private double? doubleAnchoredP2;
-        private double? doubleAnchoredD1;
-        private double? doubleAnchoredD2;
+        private IDistanceDispersalDecayKernel distanceDispersalDecayKernelFunction;
         public Dictionary<ISpecies, List<(ISpecies, double)>> SpeciesTransitionMatrix
         {
             get {
@@ -100,6 +88,10 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 dispersalMaxDistance = value;
             }
         }
+        public IDistanceDispersalDecayKernel DistanceDispersalDecayKernelFunction
+        {
+            get { return distanceDispersalDecayKernelFunction; }
+        }
 
         public ISpecies DerivedHealthySpecies
         {
@@ -110,51 +102,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 derivedHealthySpecies = value;
             }
         }
-        public double? AlphaCoefficient
-        {
-            get {
-                return alphaCoefficient;
-            }
-            set {
-                alphaCoefficient = value;
-            }
-        }
-
-        public double? AnchoredMinDistance
-        {
-            get { return anchoredMinDistance; }
-            set { anchoredMinDistance = value; }
-        }
-
-        public double? AnchoredCoefficient
-        {
-            get { return anchoredCoefficient; }
-            set { anchoredCoefficient = value; }
-        }
-
-        public double? DoubleAnchoredP1
-        {
-            get { return doubleAnchoredP1; }
-            set { doubleAnchoredP1 = value; }
-        }
-
-        public double? DoubleAnchoredP2
-        {
-            get { return doubleAnchoredP2; }
-            set { doubleAnchoredP2 = value; }
-        }
-
-        public double? DoubleAnchoredD1
-        {
-            get { return doubleAnchoredD1; }
-            set { doubleAnchoredD1 = value; }
-        }
-
-        public double? DoubleAnchoredD2
-        {
-            get { return doubleAnchoredD2; }
-            set { doubleAnchoredD2 = value; }
-        }
+        public void SetDistanceDispersalDecayKernelFunction(IDistanceDispersalDecayKernel k) { distanceDispersalDecayKernelFunction = k; }
 
         public InputParameters() {}
         public int Timestep

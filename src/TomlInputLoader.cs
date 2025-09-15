@@ -35,18 +35,21 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             switch (parameters.DistanceDispersalDecayKernel)
             {
                 case DistanceDispersalDecayKernel.NegativeExponent:
+                    if (!kernelParams.TryGetValue("alpha_coefficient", out var a1) || a1 == null)
+                        throw new InputValueException("alpha_coefficient", "alpha_coefficient is required for NegativeExponent.");
+                    parameters.SetDistanceDispersalDecayKernelFunction(new NegativeExponentKernel(Convert.ToDouble(a1)));
+                    break;
                 case DistanceDispersalDecayKernel.PowerLaw:
-                    if (!kernelParams.TryGetValue("alpha_coefficient", out var a) || a == null)
-                        throw new InputValueException("alpha_coefficient", "alpha_coefficient is required for this kernel.");
-                    parameters.AlphaCoefficient = Convert.ToDouble(a);
+                    if (!kernelParams.TryGetValue("alpha_coefficient", out var a2) || a2 == null)
+                        throw new InputValueException("alpha_coefficient", "alpha_coefficient is required for PowerLaw.");
+                    parameters.SetDistanceDispersalDecayKernelFunction(new PowerLawKernel(Convert.ToDouble(a2)));
                     break;
                 case DistanceDispersalDecayKernel.SingleAnchoredPowerLaw:
                     if (!kernelParams.TryGetValue("min_distance", out var md) || md == null)
                         throw new InputValueException("min_distance", "min_distance is required for AnchoredPowerLaw.");
                     if (!kernelParams.TryGetValue("alpha_coefficient", out var ac) || ac == null)
                         throw new InputValueException("alpha_coefficient", "alpha_coefficient is required for AnchoredPowerLaw.");
-                    parameters.AnchoredMinDistance = Convert.ToDouble(md);
-                    parameters.AnchoredCoefficient = Convert.ToDouble(ac);
+                    parameters.SetDistanceDispersalDecayKernelFunction(new SingleAnchoredPowerLawKernel(Convert.ToDouble(md), Convert.ToDouble(ac)));
                     break;
                 case DistanceDispersalDecayKernel.DoubleAnchoredPowerLaw:
                     if (!kernelParams.TryGetValue("p1", out var p1) || p1 == null)
@@ -57,10 +60,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                         throw new InputValueException("d1", "d1 is required for DoubleAnchoredPowerLaw.");
                     if (!kernelParams.TryGetValue("d2", out var d2) || d2 == null)
                         throw new InputValueException("d2", "d2 is required for DoubleAnchoredPowerLaw.");
-                    parameters.DoubleAnchoredP1 = Convert.ToDouble(p1);
-                    parameters.DoubleAnchoredP2 = Convert.ToDouble(p2);
-                    parameters.DoubleAnchoredD1 = Convert.ToDouble(d1);
-                    parameters.DoubleAnchoredD2 = Convert.ToDouble(d2);
+                    parameters.SetDistanceDispersalDecayKernelFunction(new DoubleAnchoredPowerLawKernel(Convert.ToDouble(p1), Convert.ToDouble(p2), Convert.ToDouble(d1), Convert.ToDouble(d2)));
                     break;
             }
 
@@ -142,7 +142,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             parameters.SpeciesTransitionMatrix = speciesTransitionMatrix;
             parameters.DerivedHealthySpecies = speciesOrderList[0];
 
-            ValidateKernelRequirements(parameters);
+            if (parameters.DistanceDispersalDecayKernelFunction == null) throw new InputValueException("dispersal.kernel", "Failed to construct kernel.");
 
             PlugIn.ModelCore.UI.WriteLine("Configuration summary:");
             PlugIn.ModelCore.UI.WriteLine($"  Timestep: {parameters.Timestep}");
@@ -154,50 +154,20 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             {
                 case DistanceDispersalDecayKernel.NegativeExponent:
                 case DistanceDispersalDecayKernel.PowerLaw:
-                    PlugIn.ModelCore.UI.WriteLine($"  AlphaCoefficient: {parameters.AlphaCoefficient}");
+                    PlugIn.ModelCore.UI.WriteLine($"  Kernel: {parameters.DistanceDispersalDecayKernel}");
                     break;
                 case DistanceDispersalDecayKernel.SingleAnchoredPowerLaw:
-                    PlugIn.ModelCore.UI.WriteLine($"  AnchoredMinDistance: {parameters.AnchoredMinDistance}");
-                    PlugIn.ModelCore.UI.WriteLine($"  AnchoredCoefficient: {parameters.AnchoredCoefficient}");
+                    PlugIn.ModelCore.UI.WriteLine($"  Kernel: {parameters.DistanceDispersalDecayKernel}");
                     break;
                 case DistanceDispersalDecayKernel.DoubleAnchoredPowerLaw:
-                    PlugIn.ModelCore.UI.WriteLine($"  DoubleAnchoredP1: {parameters.DoubleAnchoredP1}");
-                    PlugIn.ModelCore.UI.WriteLine($"  DoubleAnchoredP2: {parameters.DoubleAnchoredP2}");
-                    PlugIn.ModelCore.UI.WriteLine($"  DoubleAnchoredD1: {parameters.DoubleAnchoredD1}");
-                    PlugIn.ModelCore.UI.WriteLine($"  DoubleAnchoredD2: {parameters.DoubleAnchoredD2}");
+                    PlugIn.ModelCore.UI.WriteLine($"  Kernel: {parameters.DistanceDispersalDecayKernel}");
                     break;
             }
 
             return parameters;
         }
 
-        private static void ValidateKernelRequirements(IInputParameters p)
-        {
-            switch (p.DistanceDispersalDecayKernel)
-            {
-                case DistanceDispersalDecayKernel.NegativeExponent:
-                case DistanceDispersalDecayKernel.PowerLaw:
-                    if (p.AlphaCoefficient == null)
-                        throw new InputValueException("alpha_coefficient", "alpha_coefficient is required for NegativeExponent and PowerLaw.");
-                    break;
-                case DistanceDispersalDecayKernel.SingleAnchoredPowerLaw:
-                    if (p.AnchoredMinDistance == null)
-                        throw new InputValueException("min_distance", "min_distance is required for AnchoredPowerLaw.");
-                    if (p.AnchoredCoefficient == null)
-                        throw new InputValueException("alpha_coefficient", "alpha_coefficient is required for AnchoredPowerLaw.");
-                    break;
-                case DistanceDispersalDecayKernel.DoubleAnchoredPowerLaw:
-                    if (p.DoubleAnchoredP1 == null)
-                        throw new InputValueException("p1", "p1 is required for DoubleAnchoredPowerLaw.");
-                    if (p.DoubleAnchoredP2 == null)
-                        throw new InputValueException("p2", "p2 is required for DoubleAnchoredPowerLaw.");
-                    if (p.DoubleAnchoredD1 == null)
-                        throw new InputValueException("d1", "d1 is required for DoubleAnchoredPowerLaw.");
-                    if (p.DoubleAnchoredD2 == null)
-                        throw new InputValueException("d2", "d2 is required for DoubleAnchoredPowerLaw.");
-                    break;
-            }
-        }
+        // Validation is enforced during kernel construction; no separate validator required.
 
         private static object GetValue(IDictionary<string, object> model, string key, bool required)
         {
