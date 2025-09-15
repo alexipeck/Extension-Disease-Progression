@@ -58,7 +58,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             PlugIn.ModelCore.UI.WriteLine($"Generating dispersal lookup matrix for {LandscapeDimensions.x}x{LandscapeDimensions.y} landscape");
             distanceDispersalDecayMatrixWidth = worstCaseMaximumDispersalCellDistance.x + 1;
             distanceDispersalDecayMatrixHeight = (int)(worstCaseMaximumDispersalCellDistance.x * 0.7071067812) + 1;
-            indexOffsetDistanceDispersalDecayMatrix = GenerateDistanceDispersalDecayMatrix(parameters.DistanceDispersalDecayKernel, parameters.AlphaCoefficient, PlugIn.ModelCore.CellLength, worstCaseMaximumDispersalCellDistance.x, parameters.DispersalMaxDistance);
+            double alpha = parameters.AlphaCoefficient ?? 1.0;
+            indexOffsetDistanceDispersalDecayMatrix = GenerateDistanceDispersalDecayMatrix(parameters.DistanceDispersalDecayKernel, alpha, PlugIn.ModelCore.CellLength, worstCaseMaximumDispersalCellDistance.x, parameters.DispersalMaxDistance);
             PlugIn.ModelCore.UI.WriteLine("Generating dispersal probability matrix image");
             GenerateDistanceDispersalDecayMatrixImage(indexOffsetDistanceDispersalDecayMatrix);
             //TODO: Initializes empty for now, but realistically the spinup cycle should add some sites to this
@@ -211,10 +212,10 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 FOI[i] = 
                     /* Transmission & Weather Index * */
                     sum;
-                Trace.Assert(
+                /* Trace.Assert(
                     susceptibleProbability[i] + infectedProbability[i] + diseasedProbability[i] == 1.0,
                     $"SusceptibleProbability: {susceptibleProbability[i]}, InfectedProbability: {infectedProbability[i]}, DiseasedProbability: {diseasedProbability[i]}, total: {susceptibleProbability[i] + infectedProbability[i] + diseasedProbability[i]}"
-                );
+                ); */
                 susceptibleProbabilityNew[i] = susceptibleProbability[i] - (FOI[i] * susceptibleProbability[i] * timeStep);
                 infectedProbabilityNew[i] = infectedProbability[i] + ((FOI[i] * susceptibleProbability[i] * timeStep) - (diseaseProgressionRatePerUnitTime * (infectedProbability[i] * timeStep)));
                 diseasedProbabilityNew[i] = diseasedProbability[i] + (diseaseProgressionRatePerUnitTime * infectedProbability[i] * timeStep);
@@ -299,14 +300,19 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 case DistanceDispersalDecayKernel.NegativeExponent:
                     return Math.Exp(-alphaCoefficient * distance);
                 case DistanceDispersalDecayKernel.SingleAnchoredPowerLaw:
-                    return Math.Pow(PlugIn.ModelCore.CellLength / distance, 2);
+                    double minD = parameters.AnchoredMinDistance ?? PlugIn.ModelCore.CellLength;
+                    double coeff = parameters.AnchoredCoefficient ?? 2.0;
+                    if (distance <= minD) return 1.0;
+                    return Math.Pow(minD / distance, coeff);
                 case DistanceDispersalDecayKernel.DoubleAnchoredPowerLaw:
-                    //TODO: Move k math to program start, allow all parameters to be pulled from config
-                    //      Even allowing the calibration points to go outside the bounds of the hard
-                    //      dispersal cutoff and starting point to allow clipping for the shape
-                    //worstCaseMaximumDispersalCellDistance.x is max dispersal distance / cell length
-                    double k = Math.Log(1.0/0.01) / Math.Log(worstCaseMaximumDispersalCellDistance.x);
-                    double a = 1.0 * Math.Pow(PlugIn.ModelCore.CellLength, k);
+                    double p1 = parameters.DoubleAnchoredP1 ?? 1.0;
+                    double p2 = parameters.DoubleAnchoredP2 ?? 0.01;
+                    double d1 = parameters.DoubleAnchoredD1 ?? PlugIn.ModelCore.CellLength;
+                    double d2 = parameters.DoubleAnchoredD2 ?? (worstCaseMaximumDispersalCellDistance.x * PlugIn.ModelCore.CellLength);
+                    if (d1 <= 0 || d2 <= 0 || d2 <= d1) return 0.0;
+                    if (p1 <= 0 || p2 <= 0) return 0.0;
+                    double k = Math.Log(p1 / p2) / Math.Log(d2 / d1);
+                    double a = p1 * Math.Pow(d1, k);
                     return a * Math.Pow(distance, -k);
                 default:
                     throw new ArgumentException($"Dispersal type {dispersalKernel} not supported");

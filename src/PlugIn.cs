@@ -33,9 +33,12 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         public override void LoadParameters(string dataFile, ICore mCore)
         {
             modelCore = mCore;
-     
-            InputParametersParser parser = new InputParametersParser();
-            parameters = Data.Load<IInputParameters>(dataFile, parser);
+            string extension = System.IO.Path.GetExtension(dataFile)?.ToLowerInvariant();
+            if (extension != ".toml")
+            {
+                throw new System.Exception("Configuration must be a TOML file with a .toml extension.");
+            }
+            parameters = TomlInputLoader.Load(dataFile, modelCore);
         }
 
         //---------------------------------------------------------------------
