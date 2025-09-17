@@ -350,11 +350,12 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
         }
 
-        public static void GenerateSHIStateBitmap(string outputPath, double[] SHI) {
+        public static void GenerateStateBitmap(string outputPath, double[] SHI) {
             byte scaleFactor = 120;
             while (scaleFactor * landscapeDimensions.x > MAX_IMAGE_SIZE || scaleFactor * landscapeDimensions.y > MAX_IMAGE_SIZE) {
                 scaleFactor--;
             }
+            float fontScaleFactor = scaleFactor / 120.0f;
             int imageWidth = landscapeDimensions.x * scaleFactor;
             int imageHeight = landscapeDimensions.y * scaleFactor;
             Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
@@ -362,7 +363,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             using (Graphics graphics = Graphics.FromImage(bitmap))
             {
                 graphics.Clear(Color.Black);
-                using (Font font = new Font("Arial", 12))
+                using (Font font = new Font("Arial", fontScaleFactor * 12))
                 using (SolidBrush textBrush = new SolidBrush(Color.White))
                 using (Pen gridPen = new Pen(Color.DimGray, 1))
                 {

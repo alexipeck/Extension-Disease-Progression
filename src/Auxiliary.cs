@@ -63,7 +63,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression {
                 outputStopwatch.Start();
                 try {
                     string outputPath = $"{filePathPrefix}_{PlugIn.ModelCore.CurrentTime}.png";
-                    SiteVars.GenerateSHIStateBitmap(outputPath, dataCopy);
+                    SiteVars.GenerateStateBitmap(outputPath, dataCopy);
                 }
                 catch (Exception ex) {
                     PlugIn.ModelCore.UI.WriteLine($"Debug bitmap generation failed: {ex.Message}");

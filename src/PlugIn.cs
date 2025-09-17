@@ -61,7 +61,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             ModelCore.UI.WriteLine("");
             Timestep = parameters.Timestep;
             
-            string[] pathsToEmpty = new string[] { "./infection_timeline", "./shi_timeline", "./shim_timeline", "./shim_normalized_timeline" };
+            string[] pathsToEmpty = new string[] { "./infection_timeline", "./shi_timeline", "./shim_timeline", "./shim_normalized_timeline", "./foi_timeline" };
             foreach (string path in pathsToEmpty) {
                 if (System.IO.Directory.Exists(path)) {
                     System.IO.DirectoryInfo directory = new System.IO.DirectoryInfo(path);
@@ -97,12 +97,21 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             int landscapeY = LandscapeDimensions.y;
             int landscapeSize = landscapeX * landscapeY;
 
+            Stopwatch globalTimer = new Stopwatch();
+            globalTimer.Start();
+
+            Stopwatch stopwatch = new Stopwatch();
+
             //////// Young infected to healthy replacement
             /// NOTE: This is entirely to counteract the succession libraries simulated natural spread
+            stopwatch.Start();
             ReplaceAge1InfectedWithHealthy(sites, parameters);
+            ModelCore.UI.WriteLine($"Finished replacing age 1 infected with healthy: {stopwatch.ElapsedMilliseconds} ms");
+            stopwatch.Reset();
             ////////
 
             ////////Resprouting TODO: REWORK
+            stopwatch.Start();
             int[] resproutLifetime = ResproutLifetime;
             
             bool[] willResprout = new bool[landscapeSize];
@@ -121,14 +130,20 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 if (!willResprout[CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX)]) continue;
                 Reproduction.AddNewCohort(derivedHealthySpecies, site, "resprout", 0);
             }
+            ModelCore.UI.WriteLine($"Finished resprouting: {stopwatch.ElapsedMilliseconds} ms");
+            stopwatch.Reset();
             ////////
 
+            stopwatch.Start();
             (bool[] sitesForProportioning,
              List<int> healthySitesListIndices,
              List<int> infectedSitesListIndices,
              List<int> ignoredSitesListIndices) = 
                 InfectionStateDetection(sites, parameters, landscapeX, landscapeSize);
+            ModelCore.UI.WriteLine($"Finished infection state detection: {stopwatch.ElapsedMilliseconds} ms");
+            stopwatch.Reset();
 
+            stopwatch.Start();
             if (Timestep == 1) {
                 //set default probabilities from infection state
                 SetDefaultProbabilities(healthySitesListIndices, infectedSitesListIndices, ignoredSitesListIndices);
@@ -140,13 +155,13 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 //do we want to say that when a site is infected, that it's probability should be reset back to 1
                 //or do we leave it to dynamically change based existing math?
             }
-
-            Stopwatch stopwatch = new Stopwatch();
-            stopwatch.Start();
+            ModelCore.UI.WriteLine($"Finished enforcing infected probability: {stopwatch.ElapsedMilliseconds} ms");
+            stopwatch.Reset();
             
             double[] SHIM = new double[landscapeSize];
 
             ////////calculate SHI & SHIM
+            stopwatch.Start();
             double SHIMSum = 0.0;
             foreach (ActiveSite site in sites) {
                 Location siteLocation = site.Location;
@@ -157,33 +172,39 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 SHIM[index] = CalculateSiteHostIndexModified(SHI, 0.0, 0.0);
                 SHIMSum += SHIM[index];
             }
+            ModelCore.UI.WriteLine($"Finished calculating SHI & SHIM: {stopwatch.ElapsedMilliseconds} ms");
+            stopwatch.Reset();
             ExportBitmap(SHIM, "./shim_timeline/shim_state", "SHIM");
             
+            stopwatch.Start();
             double SHIMMean = SHIMSum / ModelCore.Landscape.ActiveSiteCount;
             for (int i = 0; i < landscapeSize; i++) {
                 //TODO: Consider adding a branch to skip if SHIM[i] isn't more
                 //      than 0 but mathematically it's fine unless SHIMMean is 0
                 SHIM[i] /= SHIMMean;
             }
+            ModelCore.UI.WriteLine($"Finished normalizing SHIM: {stopwatch.ElapsedMilliseconds} ms");
+            stopwatch.Reset();
             ExportBitmap(SHIM, "./shim_normalized_timeline/shim_normalized_state", "SHI Normalized");
 
+            stopwatch.Start();
             double[] FOI = CalculateForceOfInfection(landscapeX, landscapeSize, SHIM);
             ExportBitmap(FOI, "./foi_timeline/foi_state", "FOI");
-            
-            Stopwatch stopwatch1 = new Stopwatch();
-            stopwatch1.Start();
+            ModelCore.UI.WriteLine($"Finished calculating FOI: {stopwatch.ElapsedMilliseconds} ms");
+            stopwatch.Reset();
+
+            stopwatch.Start();
             foreach (int healthySiteIndex in healthySitesListIndices) {
                 double random = rand.NextDouble();
                 if (random <= FOI[healthySiteIndex]) {
                     sitesForProportioning[healthySiteIndex] = true;
                 }
             }
-            stopwatch1.Stop();
-            ModelCore.UI.WriteLine($"TIMING: {stopwatch1.ElapsedMilliseconds} ms");
             
             ModelCore.UI.WriteLine($"Finished determining which sites are newly infected: {stopwatch.ElapsedMilliseconds} ms");
             ///////////////////
             
+            stopwatch.Start();
             Dictionary<ISpecies, Dictionary<ushort, int>> newSiteCohortsDictionary = new Dictionary<ISpecies, Dictionary<ushort, int>>();
             foreach (ActiveSite site in sites) {
                 Location siteLocation = site.Location;
@@ -313,8 +334,10 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     data.Value.Clear();
                 }
             }
-            stopwatch.Stop();
-            ModelCore.UI.WriteLine($"Finished proportioning all sites: {stopwatch.ElapsedMilliseconds} ms");
+            ModelCore.UI.WriteLine($"Finished proportioning and rewriting SiteCohorts for all sites: {stopwatch.ElapsedMilliseconds} ms");
+            stopwatch.Reset();
+            globalTimer.Stop();
+            ModelCore.UI.WriteLine($"DiseaseProgression timestep took: {globalTimer.ElapsedMilliseconds} ms");
         }
         private static void ReplaceAge1InfectedWithHealthy(IEnumerable<ActiveSite> sites, IInputParameters parameters) {
             List<ISpecies> infectedVariants = parameters.SpeciesTransitionMatrix.Keys.Where(s => s != parameters.DerivedHealthySpecies).ToList();
