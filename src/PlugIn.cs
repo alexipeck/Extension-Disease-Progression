@@ -97,6 +97,11 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             int landscapeY = LandscapeDimensions.y;
             int landscapeSize = landscapeX * landscapeY;
 
+            //////// Young infected to healthy replacement
+            /// NOTE: This is entirely to counteract the succession libraries simulated natural spread
+            ReplaceAge1InfectedWithHealthy(sites, parameters);
+            ////////
+
             ////////Resprouting TODO: REWORK
             int[] resproutLifetime = ResproutLifetime;
             
@@ -310,6 +315,50 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
             stopwatch.Stop();
             ModelCore.UI.WriteLine($"Finished proportioning all sites: {stopwatch.ElapsedMilliseconds} ms");
+        }
+        private static void ReplaceAge1InfectedWithHealthy(IEnumerable<ActiveSite> sites, IInputParameters parameters) {
+            List<ISpecies> infectedVariants = parameters.SpeciesTransitionMatrix.Keys.Where(s => s != parameters.DerivedHealthySpecies).ToList();
+            Dictionary<ISpecies, Dictionary<ushort, int>> newSiteCohortsDictionary = new Dictionary<ISpecies, Dictionary<ushort, int>>();
+            foreach (ActiveSite site in sites) {
+                Location siteLocation = site.Location;
+                SiteCohorts siteCohorts = SiteVars.Cohorts[site];
+                foreach (ISpeciesCohorts speciesCohorts in siteCohorts) {
+                    SpeciesCohorts concreteSpeciesCohorts = (SpeciesCohorts)speciesCohorts;
+                    foreach (ICohort cohort in concreteSpeciesCohorts) {
+                        Cohort concreteCohort = (Cohort)cohort;
+                        ISpecies addAsSpecies;
+                        if (concreteCohort.Data.Age == 1 && infectedVariants.Contains(speciesCohorts.Species)) {
+                            addAsSpecies = parameters.DerivedHealthySpecies;
+                        } else {
+                            addAsSpecies = speciesCohorts.Species;
+                        }
+                        if (!newSiteCohortsDictionary.ContainsKey(addAsSpecies)) {
+                            newSiteCohortsDictionary[addAsSpecies] = new Dictionary<ushort, int>();
+                        }
+                        if (!newSiteCohortsDictionary[addAsSpecies].ContainsKey(concreteCohort.Data.Age)) {
+                            newSiteCohortsDictionary[addAsSpecies][concreteCohort.Data.Age] = 0;
+                        }
+                        newSiteCohortsDictionary[addAsSpecies][concreteCohort.Data.Age] += concreteCohort.Data.Biomass;
+                    }
+                }
+
+                SiteCohorts newSiteCohorts_ = new SiteCohorts();
+                foreach (var species in newSiteCohortsDictionary) {
+                    foreach (var cohort in species.Value) {
+                        if (cohort.Value > 0) {
+                            newSiteCohorts_.AddNewCohort(species.Key, cohort.Key, cohort.Value, new ExpandoObject());
+                        }
+                    }
+                }
+                foreach (ISpeciesCohorts speciesCohorts in newSiteCohorts_) {
+                    SpeciesCohorts concreteSpeciesCohorts = (SpeciesCohorts)speciesCohorts;
+                    concreteSpeciesCohorts.UpdateMaturePresent();
+                }
+                SiteVars.Cohorts[site] = newSiteCohorts_;
+                foreach (var data in newSiteCohortsDictionary) {
+                    data.Value.Clear();
+                }
+            }
         }
         private static (bool[] sitesForProportioning,
                         List<int> healthySitesListIndices,
