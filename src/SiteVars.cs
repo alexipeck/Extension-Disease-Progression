@@ -189,13 +189,18 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             double[] susceptibleProbabilityNew = new double[landscapeSize];
             double[] infectedProbabilityNew = new double[landscapeSize];
             double[] diseasedProbabilityNew = new double[landscapeSize];
+            (int x, int y)[] precomputedLandscapeCoordinates = new (int x, int y)[landscapeSize];
+            for (int i = 0; i < landscapeSize; i++) {
+                precomputedLandscapeCoordinates[i] = CalculateIndexToCoordinates(i, landscapeX);
+            }
+
             //Parallel.For(0, landscapeSize, i => {
             for (int i = 0; i < landscapeSize; i++) {
                 double sum = 0.0;
-                (int x, int y) targetCoordinates = CalculateIndexToCoordinates(i, landscapeX);
+                (int x, int y) targetCoordinates = precomputedLandscapeCoordinates[i];
                 for (int j = 0; j < landscapeSize; j++) {
                     if (i == j) continue;
-                    (int x, int y) sourceCoordinates = CalculateIndexToCoordinates(j, landscapeX);
+                    (int x, int y) sourceCoordinates = precomputedLandscapeCoordinates[j];
                     (int x, int y) relativeCoordinates = CalculateRelativeGridOffset(targetCoordinates.x, targetCoordinates.y, sourceCoordinates.x, sourceCoordinates.y);
                     (int x, int y) canonicalizedRelativeCoordinates = CanonicalizeToHalfQuadrant(relativeCoordinates.x, relativeCoordinates.y);
                     double decay = 0.0;
@@ -355,7 +360,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             while (scaleFactor * landscapeDimensions.x > MAX_IMAGE_SIZE || scaleFactor * landscapeDimensions.y > MAX_IMAGE_SIZE) {
                 scaleFactor--;
             }
-            float fontScaleFactor = scaleFactor / 120.0f;
+            float fontScaleFactor = 1 - ((1 - (scaleFactor / 120.0f)) / 2.0f);
             int imageWidth = landscapeDimensions.x * scaleFactor;
             int imageHeight = landscapeDimensions.y * scaleFactor;
             Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
@@ -376,7 +381,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                             int pixelX = gridX * scaleFactor;
                             int pixelY = gridY * scaleFactor;
                             graphics.DrawRectangle(gridPen, pixelX, pixelY, scaleFactor, scaleFactor);
-                            string text = value.ToString(/* "E2" */);
+                            string text = DoubleFormatter(value);
                             RectangleF cellRect = new RectangleF(pixelX, pixelY, scaleFactor, scaleFactor);
                             graphics.DrawString(text, font, textBrush, cellRect, stringFormat);
                         }
@@ -437,6 +442,50 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
             
             bitmap.Save(outputPath, ImageFormat.Png);
+        }
+        public static void GenerateMultiStateBitmap(string outputPath, Color[] colours) {
+            byte scaleFactor = 120;
+            while (scaleFactor * landscapeDimensions.x > MAX_IMAGE_SIZE || scaleFactor * landscapeDimensions.y > MAX_IMAGE_SIZE) {
+                scaleFactor--;
+            }
+            if (scaleFactor <= 4) {
+                Console.WriteLine($"Skipping state bitmap generation - site too large to generate image");
+                return;
+            }
+            int imageWidth = landscapeDimensions.x * scaleFactor;
+            int imageHeight = landscapeDimensions.y * scaleFactor;
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
+            using (Bitmap bitmap = new Bitmap(imageWidth, imageHeight, PixelFormat.Format32bppArgb))
+            using (Graphics graphics = Graphics.FromImage(bitmap))
+            {
+                graphics.Clear(Color.Black);
+                for (int gridY = 0; gridY < landscapeDimensions.y; gridY++) {
+                    for (int gridX = 0; gridX < landscapeDimensions.x; gridX++) {
+                        int index = CalculateCoordinatesToIndex(gridX, gridY, landscapeDimensions.x);
+                        if (index < 0 || index >= colours.Length) continue;
+                        Color c = colours[index];
+                        int pixelX = gridX * scaleFactor;
+                        int pixelY = gridY * scaleFactor;
+                        int halfW = scaleFactor / 2;
+                        int halfH = scaleFactor / 2;
+                        Rectangle tl = new Rectangle(pixelX, pixelY, halfW, halfH);
+                        Rectangle tr = new Rectangle(pixelX + halfW, pixelY, scaleFactor - halfW, halfH);
+                        Rectangle bl = new Rectangle(pixelX, pixelY + halfH, halfW, scaleFactor - halfH);
+                        Rectangle br = new Rectangle(pixelX + halfW, pixelY + halfH, scaleFactor - halfW, scaleFactor - halfH);
+                        using (SolidBrush brTL = new SolidBrush(Color.FromArgb(255, c.R, 0, 0)))
+                        using (SolidBrush brTR = new SolidBrush(Color.FromArgb(255, 0, c.G, 0)))
+                        using (SolidBrush brBL = new SolidBrush(Color.FromArgb(255, 0, 0, c.B)))
+                        using (SolidBrush brBR = new SolidBrush(Color.FromArgb(255, c.R, c.G, c.B)))
+                        {
+                            graphics.FillRectangle(brTL, tl);
+                            graphics.FillRectangle(brTR, tr);
+                            graphics.FillRectangle(brBL, bl);
+                            graphics.FillRectangle(brBR, br);
+                        }
+                    }
+                }
+                bitmap.Save(outputPath, ImageFormat.Png);
+            }
         }
     }
 }

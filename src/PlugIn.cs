@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using Landis.Library.Succession;
 using static Landis.Extension.Disturbance.DiseaseProgression.Auxiliary;
 using static Landis.Extension.Disturbance.DiseaseProgression.SiteVars;
+using System.Drawing;
 
 namespace Landis.Extension.Disturbance.DiseaseProgression
 {
@@ -61,7 +62,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             ModelCore.UI.WriteLine("");
             Timestep = parameters.Timestep;
             
-            string[] pathsToEmpty = new string[] { "./infection_timeline", "./shi_timeline", "./shim_timeline", "./shim_normalized_timeline", "./foi_timeline" };
+            string[] pathsToEmpty = new string[] { "./infection_timeline", "./shi_timeline", "./shim_timeline", "./shim_normalized_timeline", "./foi_timeline", "./infection_timeline_multi" };
             foreach (string path in pathsToEmpty) {
                 if (System.IO.Directory.Exists(path)) {
                     System.IO.DirectoryInfo directory = new System.IO.DirectoryInfo(path);
@@ -395,18 +396,38 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             List<int> healthySitesListIndices = new List<int>();
             List<int> infectedSitesListIndices = new List<int>();
             List<int> ignoredSitesListIndices = new List<int>();
+            Color[] colors = new Color[landscapeSize];
             foreach (ActiveSite site in sites) {
+                int healthyBiomass = 0;
+                int infectedBiomass = 0;
+                int ignoredBiomass = 0;
                 bool containsHealthySpecies = false;
                 bool containsInfectedSpecies = false;
                 foreach (ISpeciesCohorts speciesCohorts in SiteVars.Cohorts[site]) {
                     if (speciesCohorts.Species == parameters.DerivedHealthySpecies) {
                         containsHealthySpecies = true;
+                        foreach (ICohort cohort in speciesCohorts) {
+                            healthyBiomass += cohort.Data.Biomass;
+                        }
                     } else if (parameters.TransitionMatrixContainsSpecies(speciesCohorts.Species)) {
                         containsInfectedSpecies = true;
+                        foreach (ICohort cohort in speciesCohorts) {
+                            infectedBiomass += cohort.Data.Biomass;
+                        }
+                    } else {
+                        foreach (ICohort cohort in speciesCohorts) {
+                            ignoredBiomass += cohort.Data.Biomass;
+                        }
                     }
                 }
+                int totalBiomass = healthyBiomass + infectedBiomass + ignoredBiomass;
+                byte redIntensity = (byte)Math.Round(((double)infectedBiomass / (double)totalBiomass) * 255.0);
+                byte greenIntensity = (byte)Math.Round(((double)healthyBiomass / (double)totalBiomass) * 255.0);
+                byte blueIntensity = (byte)Math.Round(((double)ignoredBiomass / (double)totalBiomass) * 255.0);
+                Color color = Color.FromArgb(redIntensity, greenIntensity, blueIntensity);
                 Location siteLocation = site.Location;
                 int index = CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX);
+                colors[index] = color;
                 if (containsHealthySpecies && !containsInfectedSpecies) {
                     healthySitesList.Add((siteLocation.Column, siteLocation.Row));
                     healthySitesListIndices.Add(index);
@@ -418,6 +439,24 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     ignoredSitesList.Add((siteLocation.Column, siteLocation.Row));
                     ignoredSitesListIndices.Add(index);
                 }
+            }
+
+            {
+                Stopwatch outputStopwatch = new Stopwatch();
+                outputStopwatch.Start();
+                Task.Run(() => {
+                    
+                    try {
+                        string outputPath = $"./infection_timeline_multi/infection_multi_state_{modelCore.CurrentTime}.png";
+                        GenerateMultiStateBitmap(outputPath, colors);
+                    }
+                    catch (Exception ex) {
+                        ModelCore.UI.WriteLine($"Debug bitmap generation failed: {ex.Message}");
+                        throw;
+                    }
+                    outputStopwatch.Stop();
+                    ModelCore.UI.WriteLine($"      Finished outputting multi-state: {outputStopwatch.ElapsedMilliseconds} ms");
+                });
             }
 
             {

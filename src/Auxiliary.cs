@@ -73,5 +73,40 @@ namespace Landis.Extension.Disturbance.DiseaseProgression {
                 PlugIn.ModelCore.UI.WriteLine($"      Finished outputting {label} state: {outputStopwatch.ElapsedMilliseconds} ms");
             });
         }
+        public static string DoubleFormatter(double value) {
+            if (value == 1) return "1";
+            if (value == 0) return "0";
+			int zeros = 0;
+			int guard = 0;
+			while (value > 0.0 && value < 0.1 && guard < 400) {
+				value *= 10.0;
+				zeros++;
+				guard++;
+			}
+			double s = value * 10.0;
+			int d1 = (int)s; s = (s - d1) * 10.0;
+			int d2 = (int)s; s = (s - d2) * 10.0;
+			int d3 = (int)s;
+			if (d1 < 0) d1 = 0; if (d1 > 9) d1 = 9;
+			if (d2 < 0) d2 = 0; if (d2 > 9) d2 = 9;
+			if (d3 < 0) d3 = 0; if (d3 > 9) d3 = 9;
+			int eTmp = zeros;
+			int eLen = 0;
+			do { eLen++; eTmp /= 10; } while (eTmp > 0);
+			char[] buf = new char[4 + eLen];
+			buf[0] = (char)('0' + d1);
+			buf[1] = (char)('0' + d2);
+			buf[2] = (char)('0' + d3);
+			buf[3] = '-';
+			int j = 3 + eLen;
+			int e = zeros;
+			while (j > 3) {
+				int digit = e % 10;
+				buf[j] = (char)('0' + digit);
+				e /= 10;
+				j--;
+			}
+			return new string(buf);
+        }
     }
 }
