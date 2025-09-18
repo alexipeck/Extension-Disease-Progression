@@ -459,6 +459,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             using (Graphics graphics = Graphics.FromImage(bitmap))
             {
                 graphics.Clear(Color.Black);
+                graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.None;
+                graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
                 for (int gridY = 0; gridY < landscapeDimensions.y; gridY++) {
                     for (int gridX = 0; gridX < landscapeDimensions.x; gridX++) {
                         int index = CalculateCoordinatesToIndex(gridX, gridY, landscapeDimensions.x);
@@ -481,6 +483,52 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                             graphics.FillRectangle(brTR, tr);
                             graphics.FillRectangle(brBL, bl);
                             graphics.FillRectangle(brBR, br);
+                        }
+                    }
+                }
+                using (Pen gridPen = new Pen(Color.DimGray, 1))
+                {
+                    for (int gx = 1; gx < landscapeDimensions.x; gx++) {
+                        int x = gx * scaleFactor;
+                        graphics.DrawLine(gridPen, x, 0, x, imageHeight - 1);
+                    }
+                    for (int gy = 1; gy < landscapeDimensions.y; gy++) {
+                        int y = gy * scaleFactor;
+                        graphics.DrawLine(gridPen, 0, y, imageWidth - 1, y);
+                    }
+                }
+                bitmap.Save(outputPath, ImageFormat.Png);
+            }
+        }
+        public static void GenerateOverallStateBitmap(string outputPath, Color[] colours) {
+            byte scaleFactor = 120;
+            while (scaleFactor * landscapeDimensions.x > MAX_IMAGE_SIZE || scaleFactor * landscapeDimensions.y > MAX_IMAGE_SIZE) {
+                scaleFactor--;
+            }
+            if (scaleFactor <= 4) {
+                Console.WriteLine($"Skipping state bitmap generation - site too large to generate image");
+                return;
+            }
+            int imageWidth = landscapeDimensions.x * scaleFactor;
+            int imageHeight = landscapeDimensions.y * scaleFactor;
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
+            using (Bitmap bitmap = new Bitmap(imageWidth, imageHeight, PixelFormat.Format32bppArgb))
+            using (Graphics graphics = Graphics.FromImage(bitmap))
+            {
+                graphics.Clear(Color.Black);
+                graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.None;
+                graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
+                for (int gridY = 0; gridY < landscapeDimensions.y; gridY++) {
+                    for (int gridX = 0; gridX < landscapeDimensions.x; gridX++) {
+                        int index = CalculateCoordinatesToIndex(gridX, gridY, landscapeDimensions.x);
+                        if (index < 0 || index >= colours.Length) continue;
+                        Color c = colours[index];
+                        int pixelX = gridX * scaleFactor;
+                        int pixelY = gridY * scaleFactor;
+                        Rectangle cell = new Rectangle(pixelX, pixelY, scaleFactor, scaleFactor);
+                        using (SolidBrush brush = new SolidBrush(c))
+                        {
+                            graphics.FillRectangle(brush, cell);
                         }
                     }
                 }

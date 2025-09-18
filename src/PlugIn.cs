@@ -62,7 +62,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             ModelCore.UI.WriteLine("");
             Timestep = parameters.Timestep;
             
-            string[] pathsToEmpty = new string[] { "./infection_timeline", "./shi_timeline", "./shim_timeline", "./shim_normalized_timeline", "./foi_timeline", "./infection_timeline_multi" };
+            string[] pathsToEmpty = new string[] { "./infection_timeline", "./shi_timeline", "./shim_timeline", "./shim_normalized_timeline", "./foi_timeline", "./infection_timeline_multi", "./overall_timeline" };
             foreach (string path in pathsToEmpty) {
                 if (System.IO.Directory.Exists(path)) {
                     System.IO.DirectoryInfo directory = new System.IO.DirectoryInfo(path);
@@ -456,6 +456,24 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     }
                     outputStopwatch.Stop();
                     ModelCore.UI.WriteLine($"      Finished outputting multi-state: {outputStopwatch.ElapsedMilliseconds} ms");
+                });
+            }
+
+            {
+                Stopwatch outputStopwatch = new Stopwatch();
+                outputStopwatch.Start();
+                Task.Run(() => {
+                    
+                    try {
+                        string outputPath = $"./overall_timeline/overall_state_{modelCore.CurrentTime}.png";
+                        GenerateOverallStateBitmap(outputPath, colors);
+                    }
+                    catch (Exception ex) {
+                        ModelCore.UI.WriteLine($"Debug bitmap generation failed: {ex.Message}");
+                        throw;
+                    }
+                    outputStopwatch.Stop();
+                    ModelCore.UI.WriteLine($"      Finished outputting overall state: {outputStopwatch.ElapsedMilliseconds} ms");
                 });
             }
 

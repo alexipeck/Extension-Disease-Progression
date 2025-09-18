@@ -54,6 +54,8 @@ if ($landisExitCode -eq 0) {
     Write-Output "Video saved to: $LandisExecutionDir/infection_timeline.mp4"
     ffmpeg -hide_banner -loglevel error -stats -y -framerate $framerate -i "$LandisExecutionDir/infection_timeline_multi/infection_multi_state_%d.png" -c:v libx264 -pix_fmt yuv420p "$LandisExecutionDir/infection_timeline_multi.mp4"
     Write-Output "Video saved to: $LandisExecutionDir/infection_timeline_multi.mp4"
+    ffmpeg -hide_banner -loglevel error -stats -y -framerate $framerate -i "$LandisExecutionDir/overall_timeline/overall_state_%d.png" -c:v libx264 -pix_fmt yuv420p "$LandisExecutionDir/overall_timeline.mp4"
+    Write-Output "Video saved to: $LandisExecutionDir/overall_timeline.mp4"
     ffmpeg -hide_banner -loglevel error -stats -y -framerate $framerate -i "$LandisExecutionDir/shim_timeline/shim_state_%d.png" -c:v libx264 -pix_fmt yuv420p "$LandisExecutionDir/shim_timeline.mp4"
     Write-Output "Video saved to: $LandisExecutionDir/shim_timeline.mp4"
     ffmpeg -hide_banner -loglevel error -stats -y -framerate $framerate -i "$LandisExecutionDir/shim_normalized_timeline/shim_normalized_state_%d.png" -c:v libx264 -pix_fmt yuv420p "$LandisExecutionDir/shim_normalized_timeline.mp4"
