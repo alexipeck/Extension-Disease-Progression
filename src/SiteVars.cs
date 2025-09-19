@@ -355,7 +355,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
         }
 
-        public static void GenerateStateBitmap(string outputPath, double[] SHI) {
+        public static void GenerateNumericalStateBitmap(string outputPath, double[] SHI) {
             byte scaleFactor = 120;
             while (scaleFactor * landscapeDimensions.x > MAX_IMAGE_SIZE || scaleFactor * landscapeDimensions.y > MAX_IMAGE_SIZE) {
                 scaleFactor--;
@@ -437,6 +437,51 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                         int pixelX = actualX + i;
                         int pixelY = actualY + j;
                         bitmap.SetPixel(pixelX, pixelY, ignoredColor);
+                    }
+                }
+            }
+            
+            bitmap.Save(outputPath, ImageFormat.Png);
+        }
+        public static void GenerateIntensityBitmap(string outputPath, double[] intensities) {
+            int landscapeSize = LandscapeDimensions.x * LandscapeDimensions.y;
+            byte scaleFactor = 10;
+            while (scaleFactor * landscapeDimensions.x > MAX_IMAGE_SIZE || scaleFactor * landscapeDimensions.y > MAX_IMAGE_SIZE) {
+                scaleFactor--;
+            }
+            if (scaleFactor <= 0) {
+                Console.WriteLine($"Skipping intensity image generation - site too large to generate image");
+                return;
+            }
+            int imageWidth = landscapeDimensions.x * scaleFactor;
+            int imageHeight = landscapeDimensions.y * scaleFactor;
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
+            Bitmap bitmap = new Bitmap(imageWidth, imageHeight, PixelFormat.Format32bppArgb);
+
+            double min = double.PositiveInfinity;
+            double max = double.NegativeInfinity;
+            for (int i = 0; i < landscapeSize; i++) {
+                double v = intensities[i];
+                if (double.IsNaN(v) || double.IsInfinity(v)) continue;
+                if (v < min) min = v;
+                if (v > max) max = v;
+            }
+            bool useMinMax = !(double.IsInfinity(min) || double.IsInfinity(max) || max <= min);
+
+            for (int index = 0; index < landscapeSize; index++) {
+                (int x, int y) coordinates = CalculateIndexToCoordinates(index, landscapeDimensions.x);
+                double v = intensities[index];
+                if (double.IsNaN(v) || double.IsInfinity(v)) v = 0.0;
+                double n = useMinMax ? (v - min) / (max - min) : v;
+                if (n < 0.0) n = 0.0; else if (n > 1.0) n = 1.0;
+                byte intensity = (byte)Math.Round(n * 255.0);
+                int actualX = coordinates.x * scaleFactor;
+                int actualY = coordinates.y * scaleFactor;
+                for (int i = 0; i < scaleFactor; i++) {
+                    for (int j = 0; j < scaleFactor; j++) {
+                        int pixelX = actualX + i;
+                        int pixelY = actualY + j;
+                        bitmap.SetPixel(pixelX, pixelY, Color.FromArgb(intensity, intensity, intensity));
                     }
                 }
             }

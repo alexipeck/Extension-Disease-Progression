@@ -49,26 +49,45 @@ try {
 }
 if ($landisExitCode -eq 0) {
     $framerate = 10
-    Write-Output "Turning image sequences into videos..."
-    ffmpeg -hide_banner -loglevel error -stats -y -framerate $framerate -i "$LandisExecutionDir/infection_timeline/infection_state_%d.png" -c:v libx264 -pix_fmt yuv420p "$LandisExecutionDir/infection_timeline.mp4"
-    Write-Output "Video saved to: $LandisExecutionDir/infection_timeline.mp4"
-    ffmpeg -hide_banner -loglevel error -stats -y -framerate $framerate -i "$LandisExecutionDir/infection_timeline_multi/infection_multi_state_%d.png" -c:v libx264 -pix_fmt yuv420p "$LandisExecutionDir/infection_timeline_multi.mp4"
-    Write-Output "Video saved to: $LandisExecutionDir/infection_timeline_multi.mp4"
-    ffmpeg -hide_banner -loglevel error -stats -y -framerate $framerate -i "$LandisExecutionDir/overall_timeline/overall_state_%d.png" -c:v libx264 -pix_fmt yuv420p "$LandisExecutionDir/overall_timeline.mp4"
-    Write-Output "Video saved to: $LandisExecutionDir/overall_timeline.mp4"
-    ffmpeg -hide_banner -loglevel error -stats -y -framerate $framerate -i "$LandisExecutionDir/shim_timeline/shim_state_%d.png" -c:v libx264 -pix_fmt yuv420p "$LandisExecutionDir/shim_timeline.mp4"
-    Write-Output "Video saved to: $LandisExecutionDir/shim_timeline.mp4"
-    ffmpeg -hide_banner -loglevel error -stats -y -framerate $framerate -i "$LandisExecutionDir/shim_normalized_timeline/shim_normalized_state_%d.png" -c:v libx264 -pix_fmt yuv420p "$LandisExecutionDir/shim_normalized_timeline.mp4"
-    Write-Output "Video saved to: $LandisExecutionDir/shim_normalized_timeline.mp4"
-    ffmpeg -hide_banner -loglevel error -stats -y -framerate $framerate -i "$LandisExecutionDir/foi_timeline/foi_state_%d.png" -c:v libx264 -pix_fmt yuv420p "$LandisExecutionDir/foi_timeline.mp4"
-    Write-Output "Video saved to: $LandisExecutionDir/foi_timeline.mp4"
-    ffmpeg -hide_banner -loglevel error -stats -y -i "$LandisExecutionDir/infection_timeline.mp4" -i "$LandisExecutionDir/shim_timeline.mp4" -i "$LandisExecutionDir/shim_normalized_timeline.mp4" -i "$LandisExecutionDir/foi_timeline.mp4" `
-    -filter_complex "[0:v]scale=1200:1200[v0]; `
-    [1:v]scale=1200:1200[v1]; `
-    [2:v]scale=1200:1200[v2]; `
-    [3:v]scale=1200:1200[v3]; `
-    [v0][v1][v2][v3]xstack=inputs=4:layout=0_0|1200_0|0_1200|1200_1200[out]" `
-    -map "[out]" -c:v libx264 -pix_fmt yuv420p "$LandisExecutionDir/quad_view.mp4"
+
+$vfMaxH264 = 'scale=w=min(iw\,16*floor(sqrt(139264*iw/ih))):h=min(ih\,16*floor(sqrt(139264*ih/iw))):force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2,setsar=1'
+
+ffmpeg -hide_banner -loglevel error -stats -y -framerate $framerate -i "$LandisExecutionDir/infection_timeline/infection_state_%d.png" -vf $vfMaxH264 -c:v libx264 -x264-params "level=6.2" -pix_fmt yuv420p "$LandisExecutionDir/infection_timeline.mp4"
+Write-Output "Video saved to: $LandisExecutionDir/infection_timeline.mp4"
+
+ffmpeg -hide_banner -loglevel error -stats -y -framerate $framerate -i "$LandisExecutionDir/infection_timeline_multi/infection_multi_state_%d.png" -vf $vfMaxH264 -c:v libx264 -x264-params "level=6.2" -pix_fmt yuv420p "$LandisExecutionDir/infection_timeline_multi.mp4"
+Write-Output "Video saved to: $LandisExecutionDir/infection_timeline_multi.mp4"
+
+ffmpeg -hide_banner -loglevel error -stats -y -framerate $framerate -i "$LandisExecutionDir/overall_timeline/overall_state_%d.png" -vf $vfMaxH264 -c:v libx264 -x264-params "level=6.2" -pix_fmt yuv420p "$LandisExecutionDir/overall_timeline.mp4"
+Write-Output "Video saved to: $LandisExecutionDir/overall_timeline.mp4"
+
+ffmpeg -hide_banner -loglevel error -stats -y -framerate $framerate -i "$LandisExecutionDir/foi_colourised_timeline/foi_colourised_state_%d.png" -vf $vfMaxH264 -c:v libx264 -x264-params "level=6.2" -pix_fmt yuv420p "$LandisExecutionDir/foi_colourised_timeline.mp4"
+Write-Output "Video saved to: $LandisExecutionDir/foi_colourised_timeline.mp4"
+
+ffmpeg -hide_banner -loglevel error -stats -y -framerate $framerate -i "$LandisExecutionDir/shim_timeline/shim_state_%d.png" -vf $vfMaxH264 -c:v libx264 -x264-params "level=6.2" -pix_fmt yuv420p "$LandisExecutionDir/shim_timeline.mp4"
+Write-Output "Video saved to: $LandisExecutionDir/shim_timeline.mp4"
+
+ffmpeg -hide_banner -loglevel error -stats -y -framerate $framerate -i "$LandisExecutionDir/shim_normalized_timeline/shim_normalized_state_%d.png" -vf $vfMaxH264 -c:v libx264 -x264-params "level=6.2" -pix_fmt yuv420p "$LandisExecutionDir/shim_normalized_timeline.mp4"
+Write-Output "Video saved to: $LandisExecutionDir/shim_normalized_timeline.mp4"
+
+ffmpeg -hide_banner -loglevel error -stats -y -framerate $framerate -i "$LandisExecutionDir/foi_timeline/foi_state_%d.png" -vf $vfMaxH264 -c:v libx264 -x264-params "level=6.2" -pix_fmt yuv420p "$LandisExecutionDir/foi_timeline.mp4"
+Write-Output "Video saved to: $LandisExecutionDir/foi_timeline.mp4"
+
+$capSide = 16 * [math]::Floor([math]::Sqrt(139264))
+$tile    = [math]::Floor($capSide / 2)
+$tilePad = "scale=w=${tile}:h=${tile}:force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2,pad=${tile}:${tile}:(ow-iw)/2:(oh-ih)/2"
+
+$fc = @"
+[0:v]$tilePad[v0];
+[1:v]$tilePad[v1];
+[2:v]$tilePad[v2];
+[3:v]$tilePad[v3];
+[v0][v1][v2][v3]xstack=inputs=4:layout=0_0|${tile}_0|0_${tile}|${tile}_${tile}[out]
+"@
+
+ffmpeg -hide_banner -loglevel error -stats -y -i "$LandisExecutionDir/infection_timeline.mp4" -i "$LandisExecutionDir/infection_timeline_multi.mp4" -i "$LandisExecutionDir/overall_timeline.mp4" -i "$LandisExecutionDir/foi_colourised_timeline.mp4" -filter_complex $fc -map "[out]" -c:v libx264 -x264-params "level=6.2" -pix_fmt yuv420p "$LandisExecutionDir/quad_view.mp4"
+Write-Output "Video saved to: $LandisExecutionDir/quad_view.mp4"
+
 } else {
     Write-Output "Skipping video renders due to LANDIS-II non-zero exit code: $landisExitCode"
 }

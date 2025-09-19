@@ -62,7 +62,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             ModelCore.UI.WriteLine("");
             Timestep = parameters.Timestep;
             
-            string[] pathsToEmpty = new string[] { "./infection_timeline", "./shi_timeline", "./shim_timeline", "./shim_normalized_timeline", "./foi_timeline", "./infection_timeline_multi", "./overall_timeline" };
+            string[] pathsToEmpty = new string[] { "./infection_timeline", "./shi_timeline", "./shim_timeline", "./shim_normalized_timeline", "./foi_timeline", "./foi_colourised_timeline", "./infection_timeline_multi", "./overall_timeline" };
             foreach (string path in pathsToEmpty) {
                 if (System.IO.Directory.Exists(path)) {
                     System.IO.DirectoryInfo directory = new System.IO.DirectoryInfo(path);
@@ -175,7 +175,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
             ModelCore.UI.WriteLine($"Finished calculating SHI & SHIM: {stopwatch.ElapsedMilliseconds} ms");
             stopwatch.Reset();
-            ExportBitmap(SHIM, "./shim_timeline/shim_state", "SHIM");
+            ExportNumericalBitmap(SHIM, "./shim_timeline/shim_state", "SHIM");
             
             stopwatch.Start();
             double SHIMMean = SHIMSum / ModelCore.Landscape.ActiveSiteCount;
@@ -186,13 +186,30 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
             ModelCore.UI.WriteLine($"Finished normalizing SHIM: {stopwatch.ElapsedMilliseconds} ms");
             stopwatch.Reset();
-            ExportBitmap(SHIM, "./shim_normalized_timeline/shim_normalized_state", "SHI Normalized");
+            ExportNumericalBitmap(SHIM, "./shim_normalized_timeline/shim_normalized_state", "SHI Normalized");
 
             stopwatch.Start();
             double[] FOI = CalculateForceOfInfection(landscapeX, landscapeSize, SHIM);
-            ExportBitmap(FOI, "./foi_timeline/foi_state", "FOI");
             ModelCore.UI.WriteLine($"Finished calculating FOI: {stopwatch.ElapsedMilliseconds} ms");
             stopwatch.Reset();
+            ExportNumericalBitmap(FOI, "./foi_timeline/foi_state", "FOI");
+            double[] FOIScaled = new double[landscapeSize];
+            double FOImin = FOI.Min();
+            double FOImax = FOI.Max();
+            double range = FOImax - FOImin;
+            if (range == 0.0) {
+                for (int i = 0; i < landscapeSize; i++) {
+                    FOIScaled[i] = 0.0;
+                }
+            } else {
+                for (int i = 0; i < landscapeSize; i++) {
+                    FOIScaled[i] = (FOI[i] - FOImin) / range;
+                }
+            }
+            for (int i = 0; i < landscapeSize; i++) {
+                FOIScaled[i] = FOI[i];
+            }
+            ExportIntensityBitmap(FOIScaled, "./foi_colourised_timeline/foi_colourised_state", "FOI Colourised");
 
             stopwatch.Start();
             foreach (int healthySiteIndex in healthySitesListIndices) {

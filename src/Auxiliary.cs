@@ -55,7 +55,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression {
             int ay = y < 0 ? -y : y;
             return ax >= ay ? (ax, ay) : (ay, ax);
         }
-        public static void ExportBitmap(double[] data, string filePathPrefix, string label) {
+        public static void ExportIntensityBitmap(double[] data, string filePathPrefix, string label) {
             double[] dataCopy = new double[data.Length];
             Array.Copy(data, dataCopy, data.Length);
             Task.Run(() => {
@@ -63,7 +63,24 @@ namespace Landis.Extension.Disturbance.DiseaseProgression {
                 outputStopwatch.Start();
                 try {
                     string outputPath = $"{filePathPrefix}_{PlugIn.ModelCore.CurrentTime}.png";
-                    SiteVars.GenerateStateBitmap(outputPath, dataCopy);
+                    SiteVars.GenerateIntensityBitmap(outputPath, dataCopy);
+                }
+                catch (Exception ex) {
+                    PlugIn.ModelCore.UI.WriteLine($"Debug bitmap generation failed: {ex.Message}");
+                }
+                outputStopwatch.Stop();
+                PlugIn.ModelCore.UI.WriteLine($"      Finished outputting {label} state: {outputStopwatch.ElapsedMilliseconds} ms");
+            });
+        }
+        public static void ExportNumericalBitmap(double[] data, string filePathPrefix, string label) {
+            double[] dataCopy = new double[data.Length];
+            Array.Copy(data, dataCopy, data.Length);
+            Task.Run(() => {
+                Stopwatch outputStopwatch = new Stopwatch();
+                outputStopwatch.Start();
+                try {
+                    string outputPath = $"{filePathPrefix}_{PlugIn.ModelCore.CurrentTime}.png";
+                    SiteVars.GenerateNumericalStateBitmap(outputPath, dataCopy);
                 }
                 catch (Exception ex) {
                     PlugIn.ModelCore.UI.WriteLine($"Debug bitmap generation failed: {ex.Message}");
