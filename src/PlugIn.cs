@@ -116,13 +116,10 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             int[] resproutLifetime = ResproutLifetime;
             
             bool[] willResprout = new bool[landscapeSize];
-            for (int x = 0; x < landscapeX; x++) {
-                for (int y = 0; y < landscapeY; y++) {
-                    int index = CalculateCoordinatesToIndex(x, y, landscapeX);
-                    if (resproutLifetime[index] > 0) {
-                        double random = rand.NextDouble();
-                        if (random <= 0.15) willResprout[CalculateCoordinatesToIndex(x, y, landscapeX)] = true;
-                    }
+            foreach (int i in ActiveSiteIndices) {
+                if (resproutLifetime[i] > 0) {
+                    double random = rand.NextDouble();
+                    if (random <= 0.15) willResprout[i] = true;
                 }
             }
             DecrementResproutLifetimes();
@@ -179,7 +176,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             
             stopwatch.Start();
             double SHIMMean = SHIMSum / ModelCore.Landscape.ActiveSiteCount;
-            for (int i = 0; i < landscapeSize; i++) {
+            foreach (int i in ActiveSiteIndices) {
                 //TODO: Consider adding a branch to skip if SHIM[i] isn't more
                 //      than 0 but mathematically it's fine unless SHIMMean is 0
                 SHIM[i] /= SHIMMean;
@@ -189,26 +186,26 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             ExportNumericalBitmap(SHIM, "./shim_normalized_timeline/shim_normalized_state", "SHI Normalized");
 
             stopwatch.Start();
-            double[] FOI = CalculateForceOfInfection(landscapeX, landscapeSize, SHIM);
+            double[] FOI = CalculateForceOfInfection(landscapeSize, SHIM);
             ModelCore.UI.WriteLine($"Finished calculating FOI: {stopwatch.ElapsedMilliseconds} ms");
             stopwatch.Reset();
             ExportNumericalBitmap(FOI, "./foi_timeline/foi_state", "FOI");
             double[] FOIScaled = new double[landscapeSize];
-            double FOImin = FOI.Min();
-            double FOImax = FOI.Max();
+            (double FOImin, double FOImax) = MinMaxActive(FOI);
             double range = FOImax - FOImin;
             if (range == 0.0) {
                 for (int i = 0; i < landscapeSize; i++) {
                     FOIScaled[i] = 0.0;
                 }
             } else {
-                for (int i = 0; i < landscapeSize; i++) {
+                foreach (int i in ActiveSiteIndices) {
                     FOIScaled[i] = (FOI[i] - FOImin) / range;
                 }
             }
-            for (int i = 0; i < landscapeSize; i++) {
+            //TODO: Why did I do this?
+            /* for (int i = 0; i < landscapeSize; i++) {
                 FOIScaled[i] = FOI[i];
-            }
+            } */
             ExportIntensityBitmap(FOIScaled, "./foi_colourised_timeline/foi_colourised_state", "FOI Colourised");
 
             stopwatch.Start();

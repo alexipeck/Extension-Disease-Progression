@@ -26,6 +26,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         private static (int x, int y) worstCaseMaximumDispersalCellDistance;
         //NOTE: no longer necessary to exist
         private static List<(int x, int y)> precalculatedDispersalDistanceOffsets;
+        private static int[] activeSiteIndices;
+        private static (int x, int y)[] precomputedLandscapeCoordinates;
         //TODO: Add to input parameters
         private static int resproutMaxLongevity;
         private static double[] susceptibleProbability;
@@ -67,6 +69,64 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             resproutMaxLongevity = 5/* parameters.ResproutMaxLongevity */;
             //TODO: Add to input parameters
             PlugIn.ModelCore.UI.WriteLine($"Finished generating dispersal lookup matrix for {LandscapeDimensions.x}x{LandscapeDimensions.y} landscape");
+            {
+                //I needed a default that will make the program shit itself in some way if ever used
+                (int x, int y) UNSET = (x: int.MinValue, y: int.MinValue);
+                List<int> activeSiteList = new List<int>();
+                (int x, int y)[] landscapeCoordinates = new (int x, int y)[landscapeDimensions.x * landscapeDimensions.y];
+                for (int i = 0; i < landscapeDimensions.x * landscapeDimensions.y; i++) {
+                    landscapeCoordinates[i] = UNSET;
+                }
+                foreach (Site site in PlugIn.ModelCore.Landscape.ActiveSites) {
+                    int index = CalculateCoordinatesToIndex(site.Location.Column - 1, site.Location.Row - 1, LandscapeDimensions.x);
+                    activeSiteList.Add(index);
+                    landscapeCoordinates[index] = (site.Location.Column - 1, site.Location.Row - 1);
+                }
+                activeSiteIndices = activeSiteList.ToArray();
+                precomputedLandscapeCoordinates = landscapeCoordinates;
+            }
+            foreach (int index in activeSiteIndices) {
+                resproutLifetime[index] = resproutMaxLongevity;
+            }
+        }
+
+        public static double MinActive(double[] array) {
+            double min = double.PositiveInfinity;
+            foreach (int i in activeSiteIndices) {
+                if (array[i] < min) min = array[i];
+            }
+            Trace.Assert(min != double.PositiveInfinity, "Min is positive infinity");
+            return min;
+        }
+        public static double MaxActive(double[] array) {
+            double max = double.NegativeInfinity;
+            foreach (int i in activeSiteIndices) {
+                if (array[i] > max) max = array[i];
+            }
+            Trace.Assert(max != double.NegativeInfinity, "Max is negative infinity");
+            return max;
+        }
+        public static (double min, double max) MinMaxActive(double[] array) {
+            double min = double.PositiveInfinity;
+            double max = double.NegativeInfinity;
+            foreach (int i in activeSiteIndices) {
+                if (array[i] < min) min = array[i];
+                if (array[i] > max) max = array[i];
+            }
+            Trace.Assert(min != double.PositiveInfinity, "Min is positive infinity");
+            Trace.Assert(max != double.NegativeInfinity, "Max is negative infinity");
+            return (min, max);
+        }
+        public static int[] ActiveSiteIndices {
+            get {
+                return activeSiteIndices;
+            }
+        }
+        //TODO: Probably don't need to export this
+        public static (int x, int y)[] PrecomputedLandscapeCoordinates {
+            get {
+                return precomputedLandscapeCoordinates;
+            }
         }
         public static SHIMode SHIMode {
             get {
@@ -168,7 +228,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             foreach (int index in infectedSitesListIndices) {
                 infected[index] = true;
             }
-            for (int i = 0; i < landscapeSize; i++) {
+            foreach (int i in ActiveSiteIndices) {
                 if (wasInfectedLastTimestep[i] && !infected[i]) {
                     susceptibleProbability[i] = 1.0;
                     infectedProbability[i] = 0.0;
@@ -181,7 +241,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
             wasInfectedLastTimestep = infected;
         }
-        public static double[] CalculateForceOfInfection(int landscapeX, int landscapeSize, double[] SHIM) {
+        public static double[] CalculateForceOfInfection(int landscapeSize, double[] SHIM) {
             int timeStep = parameters.Timestep;
             //TODO: Needs to be passed in by the config file
             double diseaseProgressionRatePerUnitTime = 0.02;
@@ -189,25 +249,19 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             double[] susceptibleProbabilityNew = new double[landscapeSize];
             double[] infectedProbabilityNew = new double[landscapeSize];
             double[] diseasedProbabilityNew = new double[landscapeSize];
-            (int x, int y)[] precomputedLandscapeCoordinates = new (int x, int y)[landscapeSize];
-            for (int i = 0; i < landscapeSize; i++) {
-                precomputedLandscapeCoordinates[i] = CalculateIndexToCoordinates(i, landscapeX);
-            }
 
             //Parallel.For(0, landscapeSize, i => {
-            for (int i = 0; i < landscapeSize; i++) {
+            int[] activeSiteIndicesList = ActiveSiteIndices;
+            foreach (int i in activeSiteIndicesList) {
                 double sum = 0.0;
                 (int x, int y) targetCoordinates = precomputedLandscapeCoordinates[i];
-                for (int j = 0; j < landscapeSize; j++) {
+                foreach (int j in activeSiteIndicesList) {
                     if (i == j) continue;
                     (int x, int y) sourceCoordinates = precomputedLandscapeCoordinates[j];
                     (int x, int y) relativeCoordinates = CalculateRelativeGridOffset(targetCoordinates.x, targetCoordinates.y, sourceCoordinates.x, sourceCoordinates.y);
                     (int x, int y) canonicalizedRelativeCoordinates = CanonicalizeToHalfQuadrant(relativeCoordinates.x, relativeCoordinates.y);
-                    double decay = 0.0;
-                    if (canonicalizedRelativeCoordinates.x < distanceDispersalDecayMatrixWidth &&
-                        canonicalizedRelativeCoordinates.y < distanceDispersalDecayMatrixHeight) {
-                        decay = GetDistanceDispersalDecay(CalculateCoordinatesToIndex(canonicalizedRelativeCoordinates.x, canonicalizedRelativeCoordinates.y, distanceDispersalDecayMatrixWidth));
-                    }
+                    if (canonicalizedRelativeCoordinates.x >= distanceDispersalDecayMatrixWidth || canonicalizedRelativeCoordinates.y >= distanceDispersalDecayMatrixHeight) continue;
+                    double decay = GetDistanceDispersalDecay(CalculateCoordinatesToIndex(canonicalizedRelativeCoordinates.x, canonicalizedRelativeCoordinates.y, distanceDispersalDecayMatrixWidth));
                     sum += SHIM[i]
                         * SHIM[j]
                         * (infectedProbability[j] + diseasedProbability[j])
@@ -457,30 +511,22 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             int imageHeight = landscapeDimensions.y * scaleFactor;
             Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
             Bitmap bitmap = new Bitmap(imageWidth, imageHeight, PixelFormat.Format32bppArgb);
-
-            double min = double.PositiveInfinity;
-            double max = double.NegativeInfinity;
-            for (int i = 0; i < landscapeSize; i++) {
-                double v = intensities[i];
-                if (double.IsNaN(v) || double.IsInfinity(v)) continue;
-                if (v < min) min = v;
-                if (v > max) max = v;
-            }
+            (double min, double max) = MinMaxActive(intensities);
             bool useMinMax = !(double.IsInfinity(min) || double.IsInfinity(max) || max <= min);
 
-            for (int index = 0; index < landscapeSize; index++) {
-                (int x, int y) coordinates = CalculateIndexToCoordinates(index, landscapeDimensions.x);
-                double v = intensities[index];
+            for (int i = 0; i < landscapeSize; i++) {
+                (int x, int y) coordinates = CalculateIndexToCoordinates(i, landscapeDimensions.x);
+                double v = intensities[i];
                 if (double.IsNaN(v) || double.IsInfinity(v)) v = 0.0;
                 double n = useMinMax ? (v - min) / (max - min) : v;
                 if (n < 0.0) n = 0.0; else if (n > 1.0) n = 1.0;
                 byte intensity = (byte)Math.Round(n * 255.0);
                 int actualX = coordinates.x * scaleFactor;
                 int actualY = coordinates.y * scaleFactor;
-                for (int i = 0; i < scaleFactor; i++) {
-                    for (int j = 0; j < scaleFactor; j++) {
-                        int pixelX = actualX + i;
-                        int pixelY = actualY + j;
+                for (int ii = 0; ii < scaleFactor; ii++) {
+                    for (int jj = 0; jj < scaleFactor; jj++) {
+                        int pixelX = actualX + ii;
+                        int pixelY = actualY + jj;
                         bitmap.SetPixel(pixelX, pixelY, Color.FromArgb(intensity, intensity, intensity));
                     }
                 }

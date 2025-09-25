@@ -92,30 +92,6 @@ Write-Output "Video saved to: $LandisExecutionDir/quad_view.mp4"
     Write-Output "Skipping video renders due to LANDIS-II non-zero exit code: $landisExitCode"
 }
 
-<# $framerate = 10
-$panelSide = 4096
-$finalMax = 8192
-$crf = 18
-$preset = "veryfast"
-$finalSide = [math]::Min($panelSide * 2, $finalMax)
-
-ffmpeg -y -framerate $framerate -i "$LandisExecutionDir/infection_timeline/infection_state_%d.png" -vf "scale=${panelSide}:${panelSide}:force_original_aspect_ratio=decrease:flags=lanczos,pad=${panelSide}:${panelSide}:(ow-iw)/2:(oh-ih)/2,setsar=1" -c:v libx264 -pix_fmt yuv420p -crf $crf -preset $preset -x264-params level=6.2 -movflags +faststart "$LandisExecutionDir/infection_timeline.mp4"
-Write-Output "Video saved to: $LandisExecutionDir/infection_timeline.mp4"
-
-ffmpeg -y -framerate $framerate -i "$LandisExecutionDir/shim_timeline/shim_state_%d.png" -vf "scale=${panelSide}:${panelSide}:force_original_aspect_ratio=decrease:flags=lanczos,pad=${panelSide}:${panelSide}:(ow-iw)/2:(oh-ih)/2,setsar=1" -c:v libx264 -pix_fmt yuv420p -crf $crf -preset $preset -x264-params level=6.2 -movflags +faststart "$LandisExecutionDir/shim_timeline.mp4"
-Write-Output "Video saved to: $LandisExecutionDir/shim_timeline.mp4"
-
-ffmpeg -y -framerate $framerate -i "$LandisExecutionDir/shim_normalized_timeline/shim_normalized_state_%d.png" -vf "scale=${panelSide}:${panelSide}:force_original_aspect_ratio=decrease:flags=lanczos,pad=${panelSide}:${panelSide}:(ow-iw)/2:(oh-ih)/2,setsar=1" -c:v libx264 -pix_fmt yuv420p -crf $crf -preset $preset -x264-params level=6.2 -movflags +faststart "$LandisExecutionDir/shim_normalized_timeline.mp4"
-Write-Output "Video saved to: $LandisExecutionDir/shim_normalized_timeline.mp4"
-
-ffmpeg -y -framerate $framerate -i "$LandisExecutionDir/foi_timeline/foi_state_%d.png" -vf "scale=${panelSide}:${panelSide}:force_original_aspect_ratio=decrease:flags=lanczos,pad=${panelSide}:${panelSide}:(ow-iw)/2:(oh-ih)/2,setsar=1" -c:v libx264 -pix_fmt yuv420p -crf $crf -preset $preset -x264-params level=6.2 -movflags +faststart "$LandisExecutionDir/foi_timeline.mp4"
-Write-Output "Video saved to: $LandisExecutionDir/foi_timeline.mp4"
-
-ffmpeg -y -i "$LandisExecutionDir/infection_timeline.mp4" -i "$LandisExecutionDir/shim_timeline.mp4" -i "$LandisExecutionDir/shim_normalized_timeline.mp4" -i "$LandisExecutionDir/foi_timeline.mp4" -filter_complex "[0:v][1:v][2:v][3:v]xstack=inputs=4:layout=0_0|${panelSide}_0|0_${panelSide}|${panelSide}_${panelSide}[g];[g]scale=${finalSide}:${finalSide}:force_original_aspect_ratio=decrease,setsar=1[final]" -map "[final]" -c:v libx264 -pix_fmt yuv420p -crf $crf -preset $preset -x264-params level=6.2 -movflags +faststart "$LandisExecutionDir/quad_view.mp4"
-Write-Output "Video saved to: $LandisExecutionDir/quad_view.mp4" #>
-
-
-
 Write-Output "Creating filtered console output..."
 $consoleOutputPath = "$LandisExecutionDir\console-output.txt"
 $filteredOutputPath = "$LandisExecutionDir\console-output-filtered.txt"
