@@ -33,6 +33,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
     {
         int Timestep {get;set;}
         double TransmissionRate { get; set; }
+        SHIMode SHIMode { get; set; }
         Dictionary<ISpecies, List<(ISpecies, double)>> SpeciesTransitionMatrix { get; set; }
         Dictionary<ISpecies, HostIndex> SpeciesHostIndex { get; set; }
         List<(ISpecies, double)> GetTransitionMatrixDistribution(ISpecies species);
@@ -53,6 +54,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         private DistanceDispersalDecayKernel distanceDispersalDecayKernel;
         private int dispersalMaxDistance;
         private IDistanceDispersalDecayKernel distanceDispersalDecayKernelFunction;
+        private SHIMode shiMode;
         public Dictionary<ISpecies, List<(ISpecies, double)>> SpeciesTransitionMatrix
         {
             get {
@@ -134,6 +136,11 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 return null;
             }
             return speciesTransitions;
+        }
+        public SHIMode SHIMode
+        {
+            get { return shiMode; }
+            set { shiMode = value; }
         }
         
     }

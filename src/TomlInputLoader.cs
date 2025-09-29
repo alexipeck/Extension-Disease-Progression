@@ -16,9 +16,14 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
 
             var parameters = new InputParameters();
 
-            parameters.Timestep = Convert.ToInt32(GetValue(model, "Timestep", required: true));
+            parameters.Timestep = Convert.ToInt32(GetValue(model, "timestep", required: true));
             var transmissionRate = GetValue(model, "transmission_rate", required: true);
-            parameters.TransmissionRate = Convert.ToDouble(transmissionRate);
+            if (transmissionRate is double dtr) parameters.TransmissionRate = dtr;
+            else throw new InputValueException("transmission_rate", "Value must be a floating point number (unquoted).");
+            var shiModeStr = Convert.ToString(GetValue(model, "shi_mode", required: true));
+            if (string.IsNullOrWhiteSpace(shiModeStr)) throw new InputValueException("shi_mode", "Missing required key 'shi_mode'.");
+            shiModeStr = shiModeStr.ToLowerInvariant();
+            if (shiModeStr == "mean") parameters.SHIMode = SHIMode.Mean; else if (shiModeStr == "max") parameters.SHIMode = SHIMode.Max; else throw new InputValueException("shi_mode", "Valid values for 'shi_mode' are 'mean' or 'max'.");
 
             var kernelString = Convert.ToString(GetNestedValue(model, new[] { "dispersal", "kernel" }, required: true));
             parameters.DistanceDispersalDecayKernel = ParseKernel(kernelString);
@@ -28,11 +33,12 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
 
             var dispersalTable = GetTable(model, "dispersal", required: true) as IDictionary<string, object>;
             if (dispersalTable == null) throw new InputValueException("dispersal", "Missing required [dispersal] section.");
-            if (!dispersalTable.TryGetValue(kernelString, out var kernelObj))
-                throw new InputValueException($"dispersal.{kernelString}", $"Missing required [dispersal.{kernelString}] section.");
+            string kernelKey = (kernelString ?? string.Empty).Trim().ToLowerInvariant();
+            if (!TryGetCaseInsensitive(dispersalTable, kernelKey, out var kernelObj))
+                throw new InputValueException($"dispersal.{kernelKey}", $"Missing required [dispersal.{kernelKey}] section.");
             var kernelParams = kernelObj as IDictionary<string, object>;
             if (kernelParams == null)
-                throw new InputValueException($"dispersal.{kernelString}", $"[dispersal.{kernelString}] must be a table of parameters.");
+                throw new InputValueException($"dispersal.{kernelKey}", $"[dispersal.{kernelKey}] must be a table of parameters.");
 
             switch (parameters.DistanceDispersalDecayKernel)
             {
@@ -66,8 +72,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     break;
             }
 
-            var speciesHostIndexPath = Convert.ToString(GetValue(model, "SpeciesHostIndex", required: true));
-            var speciesMatrixPath = Convert.ToString(GetValue(model, "SpeciesMatrix", required: true));
+            var speciesHostIndexPath = Convert.ToString(GetValue(model, "species_host_index", required: true));
+            var speciesMatrixPath = Convert.ToString(GetValue(model, "species_matrix", required: true));
 
             var speciesNameToISpecies = new Dictionary<string, ISpecies>(StringComparer.OrdinalIgnoreCase);
             foreach (var species in PlugIn.ModelCore.Species) speciesNameToISpecies[species.Name] = species;
@@ -84,7 +90,13 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 if (columns.Length != 7) throw new InputValueException(trimmed, "Invalid number of columns in species competency file");
                 if (lineNum == 0)
                 {
-                    if (!columns[0].Equals("species", StringComparison.OrdinalIgnoreCase) || columns[1].Equals("lowage", StringComparison.OrdinalIgnoreCase) || columns[2].Equals("lowscore", StringComparison.OrdinalIgnoreCase) || columns[3].Equals("mediumage", StringComparison.OrdinalIgnoreCase) || columns[4].Equals("mediumscore", StringComparison.OrdinalIgnoreCase) || columns[5].Equals("highage", StringComparison.OrdinalIgnoreCase) || columns[6].Equals("highscore", StringComparison.OrdinalIgnoreCase)) throw new InputValueException(trimmed, "Invalid field");
+                    string[] expected = new[] { "species", "lowage", "lowscore", "mediumage", "mediumscore", "highage", "highscore" };
+                    if (columns.Length != expected.Length) throw new InputValueException(trimmed, $"Invalid header: expected {expected.Length} columns [{string.Join(", ", expected)}], found {columns.Length}.");
+                    for (int c = 0; c < expected.Length; c++) {
+                        if (!columns[c].Equals(expected[c], StringComparison.OrdinalIgnoreCase)) {
+                            throw new InputValueException(columns[c], $"Invalid header column {c + 1}: expected '{expected[c]}', found '{columns[c]}'.");
+                        }
+                    }
                     continue;
                 }
                 if (!speciesNameToISpecies.TryGetValue(columns[0], out ISpecies species)) throw new InputValueException(columns[0], $"Species '{columns[0]}' on line {lineNum} of SpeciesMatrix file does not exist in scenario species list.1");
@@ -149,10 +161,11 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             PlugIn.ModelCore.UI.WriteLine("Configuration summary:");
             PlugIn.ModelCore.UI.WriteLine($"  Timestep: {parameters.Timestep}");
             PlugIn.ModelCore.UI.WriteLine($"  Transmission rate: {parameters.TransmissionRate}");
-            PlugIn.ModelCore.UI.WriteLine($"  SpeciesHostIndex: {speciesHostIndexPath}");
-            PlugIn.ModelCore.UI.WriteLine($"  SpeciesMatrix: {speciesMatrixPath}");
+            PlugIn.ModelCore.UI.WriteLine($"  Species host index: {speciesHostIndexPath}");
+            PlugIn.ModelCore.UI.WriteLine($"  Species matrix: {speciesMatrixPath}");
             PlugIn.ModelCore.UI.WriteLine($"  Dispersal kernel: {parameters.DistanceDispersalDecayKernel}");
             PlugIn.ModelCore.UI.WriteLine($"  Dispersal maximum distance: {parameters.DispersalMaxDistance}");
+            PlugIn.ModelCore.UI.WriteLine($"  SHI mode: {parameters.SHIMode}");
             switch (parameters.DistanceDispersalDecayKernel)
             {
                 case DistanceDispersalDecayKernel.NegativeExponent:
@@ -220,12 +233,28 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
 
         private static DistanceDispersalDecayKernel ParseKernel(string text)
         {
-            if (string.Equals(text, "NegativeExponent", StringComparison.OrdinalIgnoreCase)) return DistanceDispersalDecayKernel.NegativeExponent;
-            if (string.Equals(text, "PowerLaw", StringComparison.OrdinalIgnoreCase)) return DistanceDispersalDecayKernel.PowerLaw;
-            if (string.Equals(text, "AnchoredPowerLaw", StringComparison.OrdinalIgnoreCase)) return DistanceDispersalDecayKernel.SingleAnchoredPowerLaw;
-            if (string.Equals(text, "DoubleAnchoredPowerLaw", StringComparison.OrdinalIgnoreCase)) return DistanceDispersalDecayKernel.DoubleAnchoredPowerLaw;
-            throw new FormatException("Valid kernels: NegativeExponent, PowerLaw, AnchoredPowerLaw, DoubleAnchoredPowerLaw");
+            if (text == null) throw new FormatException("Kernel is required.");
+            string t = text.Trim();
+            if (string.Equals(t, "negative_exponent", StringComparison.OrdinalIgnoreCase)) return DistanceDispersalDecayKernel.NegativeExponent;
+            if (string.Equals(t, "power_law", StringComparison.OrdinalIgnoreCase)) return DistanceDispersalDecayKernel.PowerLaw;
+            if (string.Equals(t, "anchored_power_law", StringComparison.OrdinalIgnoreCase)) return DistanceDispersalDecayKernel.SingleAnchoredPowerLaw;
+            if (string.Equals(t, "double_anchored_power_law", StringComparison.OrdinalIgnoreCase)) return DistanceDispersalDecayKernel.DoubleAnchoredPowerLaw;
+            throw new FormatException("Valid kernels: negative_exponent, power_law, anchored_power_law, double_anchored_power_law");
         }
+
+        private static bool TryGetCaseInsensitive(IDictionary<string, object> table, string key, out object value)
+        {
+            foreach (var kv in table)
+            {
+                if (string.Equals(kv.Key, key, StringComparison.OrdinalIgnoreCase)) { value = kv.Value; return true; }
+            }
+            value = null;
+            return false;
+        }
+
+        
+
+        
 
 
     }

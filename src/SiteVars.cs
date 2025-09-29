@@ -29,6 +29,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         private static int[] activeSiteIndices;
         private static (int x, int y)[] precomputedLandscapeCoordinates;
         private static double[] normalizedWeatherIndex;
+        private static double transmissionRate;
         //TODO: Add to input parameters
         private static int resproutMaxLongevity;
         private static double[] susceptibleProbability;
@@ -36,7 +37,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         private static double[] diseasedProbability;
         private static IInputParameters parameters;
         private const int MAX_IMAGE_SIZE = 16384;
-        private static SHIMode siteHostIndexMode = SHIMode.Mean;
+        private static SHIMode siteHostIndexMode;
         private static bool[] wasInfectedLastTimestep;
         public static void Initialize(ICore modelCore, IInputParameters inputParameters) {
             parameters = inputParameters;
@@ -70,6 +71,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             resproutMaxLongevity = 5/* parameters.ResproutMaxLongevity */;
             //TODO: Add to input parameters
             IEnumerable<ActiveSite> sites = PlugIn.ModelCore.Landscape.ActiveSites;
+            SHIMode = parameters.SHIMode;
+            transmissionRate = parameters.TransmissionRate;
             PlugIn.ModelCore.UI.WriteLine($"Finished generating dispersal lookup matrix for {LandscapeDimensions.x}x{LandscapeDimensions.y} landscape");
             {
                 //I needed a default that will make the program shit itself in some way if ever used
@@ -275,7 +278,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             //Parallel.For(0, landscapeSize, i => {
             int[] activeSiteIndicesList = ActiveSiteIndices;
             foreach (int i in activeSiteIndicesList) {
-                double beta_t = normalizedWeatherIndex[i] * parameters.TransmissionRate;
+                double beta_t = normalizedWeatherIndex[i] * transmissionRate;
                 double sum = 0.0;
                 (int x, int y) targetCoordinates = precomputedLandscapeCoordinates[i];
                 foreach (int j in activeSiteIndicesList) {
