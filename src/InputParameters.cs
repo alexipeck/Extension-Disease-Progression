@@ -32,6 +32,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
     public interface IInputParameters
     {
         int Timestep {get;set;}
+        double TransmissionRate { get; set; }
         Dictionary<ISpecies, List<(ISpecies, double)>> SpeciesTransitionMatrix { get; set; }
         Dictionary<ISpecies, HostIndex> SpeciesHostIndex { get; set; }
         List<(ISpecies, double)> GetTransitionMatrixDistribution(ISpecies species);
@@ -45,6 +46,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         : IInputParameters
     {
         private int timestep;
+        private double transmissionRate;
         private Dictionary<ISpecies, List<(ISpecies, double)>> speciesTransitionMatrix;
         private Dictionary<ISpecies, HostIndex> speciesHostIndex;
         private ISpecies derivedHealthySpecies;
@@ -116,6 +118,12 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                                                       "Value must be = or > 0.");
                 timestep = value;
             }
+        }
+
+        public double TransmissionRate
+        {
+            get { return transmissionRate; }
+            set { transmissionRate = value; }
         }
 
         public bool TransitionMatrixContainsSpecies(ISpecies species) {

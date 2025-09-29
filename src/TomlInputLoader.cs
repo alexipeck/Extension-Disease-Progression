@@ -17,6 +17,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             var parameters = new InputParameters();
 
             parameters.Timestep = Convert.ToInt32(GetValue(model, "Timestep", required: true));
+            var transmissionRate = GetValue(model, "transmission_rate", required: true);
+            parameters.TransmissionRate = Convert.ToDouble(transmissionRate);
 
             var kernelString = Convert.ToString(GetNestedValue(model, new[] { "dispersal", "kernel" }, required: true));
             parameters.DistanceDispersalDecayKernel = ParseKernel(kernelString);
@@ -82,7 +84,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 if (columns.Length != 7) throw new InputValueException(trimmed, "Invalid number of columns in species competency file");
                 if (lineNum == 0)
                 {
-                    if (columns[0].ToLower() != "species" || columns[1].ToLower() != "lowage" || columns[2].ToLower() != "lowscore" || columns[3].ToLower() != "mediumage" || columns[4].ToLower() != "mediumscore" || columns[5].ToLower() != "highage" || columns[6].ToLower() != "highscore") throw new InputValueException(trimmed, "Invalid field");
+                    if (!columns[0].Equals("species", StringComparison.OrdinalIgnoreCase) || columns[1].Equals("lowage", StringComparison.OrdinalIgnoreCase) || columns[2].Equals("lowscore", StringComparison.OrdinalIgnoreCase) || columns[3].Equals("mediumage", StringComparison.OrdinalIgnoreCase) || columns[4].Equals("mediumscore", StringComparison.OrdinalIgnoreCase) || columns[5].Equals("highage", StringComparison.OrdinalIgnoreCase) || columns[6].Equals("highscore", StringComparison.OrdinalIgnoreCase)) throw new InputValueException(trimmed, "Invalid field");
                     continue;
                 }
                 if (!speciesNameToISpecies.TryGetValue(columns[0], out ISpecies species)) throw new InputValueException(columns[0], $"Species '{columns[0]}' on line {lineNum} of SpeciesMatrix file does not exist in scenario species list.1");
@@ -146,6 +148,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
 
             PlugIn.ModelCore.UI.WriteLine("Configuration summary:");
             PlugIn.ModelCore.UI.WriteLine($"  Timestep: {parameters.Timestep}");
+            PlugIn.ModelCore.UI.WriteLine($"  Transmission rate: {parameters.TransmissionRate}");
             PlugIn.ModelCore.UI.WriteLine($"  SpeciesHostIndex: {speciesHostIndexPath}");
             PlugIn.ModelCore.UI.WriteLine($"  SpeciesMatrix: {speciesMatrixPath}");
             PlugIn.ModelCore.UI.WriteLine($"  Dispersal kernel: {parameters.DistanceDispersalDecayKernel}");

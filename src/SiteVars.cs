@@ -28,6 +28,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         private static List<(int x, int y)> precalculatedDispersalDistanceOffsets;
         private static int[] activeSiteIndices;
         private static (int x, int y)[] precomputedLandscapeCoordinates;
+        private static double[] normalizedWeatherIndex;
         //TODO: Add to input parameters
         private static int resproutMaxLongevity;
         private static double[] susceptibleProbability;
@@ -68,6 +69,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             //TODO: Add to input parameters
             resproutMaxLongevity = 5/* parameters.ResproutMaxLongevity */;
             //TODO: Add to input parameters
+            IEnumerable<ActiveSite> sites = PlugIn.ModelCore.Landscape.ActiveSites;
             PlugIn.ModelCore.UI.WriteLine($"Finished generating dispersal lookup matrix for {LandscapeDimensions.x}x{LandscapeDimensions.y} landscape");
             {
                 //I needed a default that will make the program shit itself in some way if ever used
@@ -77,7 +79,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 for (int i = 0; i < landscapeDimensions.x * landscapeDimensions.y; i++) {
                     landscapeCoordinates[i] = UNSET;
                 }
-                foreach (Site site in PlugIn.ModelCore.Landscape.ActiveSites) {
+                foreach (Site site in sites) {
                     int index = CalculateCoordinatesToIndex(site.Location.Column - 1, site.Location.Row - 1, LandscapeDimensions.x);
                     activeSiteList.Add(index);
                     landscapeCoordinates[index] = (site.Location.Column - 1, site.Location.Row - 1);
@@ -87,6 +89,25 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
             foreach (int index in activeSiteIndices) {
                 resproutLifetime[index] = resproutMaxLongevity;
+            }
+
+            //weather index
+            {
+                double[] normalizedWeatherIndex_ = new double[landscapeDimensions.x * landscapeDimensions.y];
+                var it = ((IEnumerable<int>)ActiveSiteIndices).GetEnumerator();
+                bool hasNext = it.MoveNext();
+                foreach (ActiveSite site in sites) {
+                    Location location = site.Location;
+                    int index = CalculateCoordinatesToIndex(location.Column - 1, location.Row - 1, landscapeDimensions.x);
+                    while (hasNext && it.Current < index) hasNext = it.MoveNext();
+                    if (hasNext && it.Current == index) {
+                        /* double weatherIndex = SiteVars.ClimateVars[site]["AnnualWeatherIndex"];
+                        double normalizedWI = weatherIndex / agent.EcoWeatherIndexNormal[PlugIn.ModelCore.Ecoregion[site].Index];
+                        normalizedWeatherIndex_[index] = normalizedWI; */
+                        hasNext = it.MoveNext();
+                    }
+                }
+                normalizedWeatherIndex = normalizedWeatherIndex_;
             }
         }
 
@@ -245,6 +266,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             int timeStep = parameters.Timestep;
             //TODO: Needs to be passed in by the config file
             double diseaseProgressionRatePerUnitTime = 0.02;
+            
             double[] FOI = new double[landscapeSize];
             double[] susceptibleProbabilityNew = new double[landscapeSize];
             double[] infectedProbabilityNew = new double[landscapeSize];
@@ -253,6 +275,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             //Parallel.For(0, landscapeSize, i => {
             int[] activeSiteIndicesList = ActiveSiteIndices;
             foreach (int i in activeSiteIndicesList) {
+                double beta_t = normalizedWeatherIndex[i] * parameters.TransmissionRate;
                 double sum = 0.0;
                 (int x, int y) targetCoordinates = precomputedLandscapeCoordinates[i];
                 foreach (int j in activeSiteIndicesList) {
@@ -351,8 +374,6 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             
             return dispersalLookupMatrix;
         }
-        // Removed kernel-specific probability function; computation is delegated to the chosen kernel instance.
-
         public static ISiteVar<SiteCohorts> Cohorts
         {
             get
