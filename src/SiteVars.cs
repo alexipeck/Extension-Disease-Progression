@@ -27,6 +27,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         private static (int x, int y) worstCaseMaximumDispersalCellDistance;
         private static (int x, int y)[] precomputedDispersalDistanceOffsets;
         private static int[] activeSiteIndices;
+        private static HashSet<int> activeSiteIndicesSet;
         private static (int x, int y)[] precomputedLandscapeCoordinates;
         private static double[] normalizedWeatherIndex;
         private static double transmissionRate;
@@ -93,6 +94,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     landscapeCoordinates[index] = (site.Location.Column - 1, site.Location.Row - 1);
                 }
                 activeSiteIndices = activeSiteList.ToArray();
+                activeSiteIndicesSet = new HashSet<int>(activeSiteIndices);
                 precomputedLandscapeCoordinates = landscapeCoordinates;
             }
             foreach (int index in activeSiteIndices) {
@@ -256,7 +258,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             foreach (int index in infectedSitesListIndices) {
                 infected[index] = true;
             }
-            foreach (int i in ActiveSiteIndices) {
+            foreach (int i in activeSiteIndices) {
                 if (wasInfectedLastTimestep[i] && !infected[i]) {
                     susceptibleProbability[i] = 1.0;
                     infectedProbability[i] = 0.0;
@@ -280,30 +282,22 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             double[] diseasedProbabilityNew = new double[landscapeSize];
 
             //Parallel.For(0, landscapeSize, i => {
-            int[] activeSiteIndices = ActiveSiteIndices;
             foreach (int i in activeSiteIndices) {
                 double beta_t = normalizedWeatherIndex[i] * transmissionRate;
                 double sum = 0.0;
                 (int x, int y) targetCoordinates = precomputedLandscapeCoordinates[i];
-                int[] indexesToOperateOn;
-                List<int> indexesToOperateOnList = new List<int>();
-                {
-                    foreach ((int x, int y) in precomputedDispersalDistanceOffsets) {
-                        if (targetCoordinates.x + x < 0
-                            || targetCoordinates.x + x >= landscapeDimensions.x
-                            || targetCoordinates.y + y < 0
-                            || targetCoordinates.y + y >= landscapeDimensions.y
-                        ) continue;
-                        int index = CalculateCoordinatesToIndex(targetCoordinates.x, targetCoordinates.y, landscapeDimensions.x);
-                        indexesToOperateOnList.Add(index + i);
-                    }
-                    indexesToOperateOn = indexesToOperateOnList.Intersect(activeSiteIndices).ToArray();
-                }
-                foreach (int j in indexesToOperateOn/* activeSiteIndices */) {
+                foreach ((int x, int y) in precomputedDispersalDistanceOffsets) {
+                    if (targetCoordinates.x + x < 0
+                        || targetCoordinates.x + x >= landscapeDimensions.x
+                        || targetCoordinates.y + y < 0
+                        || targetCoordinates.y + y >= landscapeDimensions.y
+                    ) continue;
+                    int index = CalculateCoordinatesToIndex(x, y, landscapeDimensions.x);
+                    if (!activeSiteIndicesSet.Contains(index + i)) continue;
+                    int j = index + i;
+                    //NOTE: I theoretically don't need this anymore
                     if (i == j) continue;
-                    (int x, int y) sourceCoordinates = precomputedLandscapeCoordinates[j];
-                    (int x, int y) relativeCoordinates = CalculateRelativeGridOffset(targetCoordinates.x, targetCoordinates.y, sourceCoordinates.x, sourceCoordinates.y);
-                    (int x, int y) canonicalizedRelativeCoordinates = CanonicalizeToHalfQuadrant(relativeCoordinates.x, relativeCoordinates.y);
+                    (int x, int y) canonicalizedRelativeCoordinates = CanonicalizeToHalfQuadrant(x, y);
                     if (canonicalizedRelativeCoordinates.x >= distanceDispersalDecayMatrixWidth || canonicalizedRelativeCoordinates.y >= distanceDispersalDecayMatrixHeight) continue;
                     double decay = GetDistanceDispersalDecay(CalculateCoordinatesToIndex(canonicalizedRelativeCoordinates.x, canonicalizedRelativeCoordinates.y, distanceDispersalDecayMatrixWidth));
                     sum += SHIM[i]
