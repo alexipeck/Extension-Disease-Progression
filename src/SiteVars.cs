@@ -24,8 +24,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         private static (int x, int y) landscapeDimensions;
         private static int[] resproutLifetime;
         private static (int x, int y) worstCaseMaximumDispersalCellDistance;
-        //NOTE: no longer necessary to exist
-        private static List<(int x, int y)> precalculatedDispersalDistanceOffsets;
+        private static int[] precalculatedDispersalDistanceOffsets;
         private static int[] activeSiteIndices;
         private static (int x, int y)[] precomputedLandscapeCoordinates;
         private static double[] normalizedWeatherIndex;
@@ -52,13 +51,41 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             int worstCaseMaximumDispersalCellDistanceX = (int)Math.Ceiling(parameters.DispersalMaxDistance / PlugIn.ModelCore.CellLength);
             worstCaseMaximumDispersalCellDistance = (worstCaseMaximumDispersalCellDistanceX, (int)(worstCaseMaximumDispersalCellDistanceX * 0.7071067812) + 1);
             
-            precalculatedDispersalDistanceOffsets = new List<(int x, int y)>();
-            for (int x = -worstCaseMaximumDispersalCellDistance.x; x <= worstCaseMaximumDispersalCellDistance.x; x++) {
+            {
+                List<int> precalculatedDispersalDistanceOffsetsList = new List<int>();
                 for (int y = -worstCaseMaximumDispersalCellDistance.y; y <= worstCaseMaximumDispersalCellDistance.y; y++) {
-                    if ((x == 0 && y == 0) || CalculatedEuclideanDistanceUsingGridOffset(x, y) > worstCaseMaximumDispersalCellDistance.x) continue;
-                    precalculatedDispersalDistanceOffsets.Add((x, y));
+                    for (int x = -worstCaseMaximumDispersalCellDistance.x; x <= worstCaseMaximumDispersalCellDistance.x; x++) {
+                        if (Math.Abs(x) >= landscapeDimensions.x || Math.Abs(y) >= landscapeDimensions.y) continue;
+                        if ((x == 0 && y == 0) || CalculatedEuclideanDistanceUsingGridOffset(x, y) > worstCaseMaximumDispersalCellDistance.x) continue;
+                        int index = CalculateCoordinatesToIndex(x, y, landscapeDimensions.x);
+                        //if (index == 0) continue;
+                        Console.Write($"{index}, x: {x}, y: {y}\n");
+                        precalculatedDispersalDistanceOffsetsList.Add(index);
+                    }
+                };
+                precalculatedDispersalDistanceOffsets = precalculatedDispersalDistanceOffsetsList.ToArray();
+                //PlugIn.ModelCore.UI.WriteLine(string.Join(", ", precalculatedDispersalDistanceOffsets));
+            }
+            {
+                if (precalculatedDispersalDistanceOffsets.Length > 0) {
+                    int[] a = precalculatedDispersalDistanceOffsets;
+                    int start = a[0];
+                    int prev = a[0];
+                    for (int i = 1; i < a.Length; i++) {
+                        int cur = a[i];
+                        if (cur == prev || cur == prev + 1) {
+                            if (cur > prev) prev = cur;
+                            continue;
+                        }
+                        string line = start == prev ? start.ToString() : $"{start} -> {prev}";
+                        PlugIn.ModelCore.UI.WriteLine(line);
+                        start = cur;
+                        prev = cur;
+                    }
+                    string last = start == prev ? start.ToString() : $"{start} -> {prev}";
+                    PlugIn.ModelCore.UI.WriteLine(last);
                 }
-            };
+            }
             PlugIn.ModelCore.UI.WriteLine($"Generating dispersal lookup matrix for {LandscapeDimensions.x}x{LandscapeDimensions.y} landscape");
             distanceDispersalDecayMatrixWidth = worstCaseMaximumDispersalCellDistance.x + 1;
             distanceDispersalDecayMatrixHeight = (int)(worstCaseMaximumDispersalCellDistance.x * 0.7071067812) + 1;
@@ -146,12 +173,11 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 return activeSiteIndices;
             }
         }
-        //TODO: Probably don't need to export this
-        public static (int x, int y)[] PrecomputedLandscapeCoordinates {
+        /* public static (int x, int y)[] PrecomputedLandscapeCoordinates {
             get {
                 return precomputedLandscapeCoordinates;
             }
-        }
+        } */
         public static SHIMode SHIMode {
             get {
                 return siteHostIndexMode;
@@ -176,11 +202,11 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
         }
 
-        public static List<(int x, int y)> PrecalculatedDispersalDistanceOffsets {
+        /* public static int[] PrecalculatedDispersalDistanceOffsets {
             get {
                 return precalculatedDispersalDistanceOffsets;
             }
-        }
+        } */
         public static (int x, int y) LandscapeDimensions {
             get {
                 return landscapeDimensions;
