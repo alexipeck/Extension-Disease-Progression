@@ -280,9 +280,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             double[] susceptibleProbabilityNew = new double[landscapeSize];
             double[] infectedProbabilityNew = new double[landscapeSize];
             double[] diseasedProbabilityNew = new double[landscapeSize];
-
-            //Parallel.For(0, landscapeSize, i => {
-            foreach (int i in activeSiteIndices) {
+            Parallel.ForEach(activeSiteIndices, i => {
                 double beta_t = normalizedWeatherIndex[i] * transmissionRate;
                 double sum = 0.0;
                 (int x, int y) targetCoordinates = precomputedLandscapeCoordinates[i];
@@ -295,8 +293,6 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     int index = CalculateCoordinatesToIndex(x, y, landscapeDimensions.x);
                     if (!activeSiteIndicesSet.Contains(index + i)) continue;
                     int j = index + i;
-                    //NOTE: I theoretically don't need this anymore
-                    if (i == j) continue;
                     (int x, int y) canonicalizedRelativeCoordinates = CanonicalizeToHalfQuadrant(x, y);
                     if (canonicalizedRelativeCoordinates.x >= distanceDispersalDecayMatrixWidth || canonicalizedRelativeCoordinates.y >= distanceDispersalDecayMatrixHeight) continue;
                     double decay = GetDistanceDispersalDecay(CalculateCoordinatesToIndex(canonicalizedRelativeCoordinates.x, canonicalizedRelativeCoordinates.y, distanceDispersalDecayMatrixWidth));
@@ -315,7 +311,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 susceptibleProbabilityNew[i] = susceptibleProbability[i] - (FOI[i] * susceptibleProbability[i] * timeStep);
                 infectedProbabilityNew[i] = infectedProbability[i] + ((FOI[i] * susceptibleProbability[i] * timeStep) - (diseaseProgressionRatePerUnitTime * (infectedProbability[i] * timeStep)));
                 diseasedProbabilityNew[i] = diseasedProbability[i] + (diseaseProgressionRatePerUnitTime * infectedProbability[i] * timeStep);
-            }//);
+            });
             susceptibleProbability = susceptibleProbabilityNew;
             infectedProbability = infectedProbabilityNew;
             diseasedProbability = diseasedProbabilityNew;
