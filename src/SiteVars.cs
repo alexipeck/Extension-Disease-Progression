@@ -11,6 +11,7 @@ using System.IO;
 using static Landis.Extension.Disturbance.DiseaseProgression.Auxiliary;
 using Landis.Library.Succession.DemographicSeeding;
 using System.Threading.Tasks;
+using log4net.Core;
 
 namespace Landis.Extension.Disturbance.DiseaseProgression
 {
@@ -24,9 +25,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         private static (int x, int y) landscapeDimensions;
         private static int[] resproutLifetime;
         private static (int x, int y) worstCaseMaximumDispersalCellDistance;
-        //NOTE: no longer necessary to exist
-        private static List<(int x, int y)> precalculatedDispersalDistanceOffsets;
+        private static (int x, int y)[] precomputedDispersalDistanceOffsets;
         private static int[] activeSiteIndices;
+        private static HashSet<int> activeSiteIndicesSet;
         private static (int x, int y)[] precomputedLandscapeCoordinates;
         private static double[] normalizedWeatherIndex;
         private static double transmissionRate;
@@ -52,13 +53,18 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             int worstCaseMaximumDispersalCellDistanceX = (int)Math.Ceiling(parameters.DispersalMaxDistance / PlugIn.ModelCore.CellLength);
             worstCaseMaximumDispersalCellDistance = (worstCaseMaximumDispersalCellDistanceX, (int)(worstCaseMaximumDispersalCellDistanceX * 0.7071067812) + 1);
             
-            precalculatedDispersalDistanceOffsets = new List<(int x, int y)>();
-            for (int x = -worstCaseMaximumDispersalCellDistance.x; x <= worstCaseMaximumDispersalCellDistance.x; x++) {
+            {
+                List<(int x, int y)> precalculatedDispersalDistanceOffsetsList = new List<(int x, int y)>();
                 for (int y = -worstCaseMaximumDispersalCellDistance.y; y <= worstCaseMaximumDispersalCellDistance.y; y++) {
-                    if ((x == 0 && y == 0) || CalculatedEuclideanDistanceUsingGridOffset(x, y) > worstCaseMaximumDispersalCellDistance.x) continue;
-                    precalculatedDispersalDistanceOffsets.Add((x, y));
-                }
-            };
+                    for (int x = -worstCaseMaximumDispersalCellDistance.x; x <= worstCaseMaximumDispersalCellDistance.x; x++) {
+                        if (Math.Abs(x) >= landscapeDimensions.x || Math.Abs(y) >= landscapeDimensions.y) continue;
+                        if ((x == 0 && y == 0) || CalculatedEuclideanDistanceUsingGridOffset(x, y) > worstCaseMaximumDispersalCellDistance.x) continue;
+                        precalculatedDispersalDistanceOffsetsList.Add((x, y));
+                    }
+                };
+                precomputedDispersalDistanceOffsets = precalculatedDispersalDistanceOffsetsList.ToArray();
+                //PlugIn.ModelCore.UI.WriteLine(string.Join(", ", precalculatedDispersalDistanceOffsets.Select(o => $"({o.x}, {o.y})")));
+            }
             PlugIn.ModelCore.UI.WriteLine($"Generating dispersal lookup matrix for {LandscapeDimensions.x}x{LandscapeDimensions.y} landscape");
             distanceDispersalDecayMatrixWidth = worstCaseMaximumDispersalCellDistance.x + 1;
             distanceDispersalDecayMatrixHeight = (int)(worstCaseMaximumDispersalCellDistance.x * 0.7071067812) + 1;
@@ -88,6 +94,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     landscapeCoordinates[index] = (site.Location.Column - 1, site.Location.Row - 1);
                 }
                 activeSiteIndices = activeSiteList.ToArray();
+                activeSiteIndicesSet = new HashSet<int>(activeSiteIndices);
                 precomputedLandscapeCoordinates = landscapeCoordinates;
             }
             foreach (int index in activeSiteIndices) {
@@ -146,12 +153,11 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 return activeSiteIndices;
             }
         }
-        //TODO: Probably don't need to export this
-        public static (int x, int y)[] PrecomputedLandscapeCoordinates {
+        /* public static (int x, int y)[] PrecomputedLandscapeCoordinates {
             get {
                 return precomputedLandscapeCoordinates;
             }
-        }
+        } */
         public static SHIMode SHIMode {
             get {
                 return siteHostIndexMode;
@@ -176,11 +182,11 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
         }
 
-        public static List<(int x, int y)> PrecalculatedDispersalDistanceOffsets {
+        /* public static int[] PrecalculatedDispersalDistanceOffsets {
             get {
                 return precalculatedDispersalDistanceOffsets;
             }
-        }
+        } */
         public static (int x, int y) LandscapeDimensions {
             get {
                 return landscapeDimensions;
@@ -252,7 +258,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             foreach (int index in infectedSitesListIndices) {
                 infected[index] = true;
             }
-            foreach (int i in ActiveSiteIndices) {
+            foreach (int i in activeSiteIndices) {
                 if (wasInfectedLastTimestep[i] && !infected[i]) {
                     susceptibleProbability[i] = 1.0;
                     infectedProbability[i] = 0.0;
@@ -276,16 +282,22 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             double[] diseasedProbabilityNew = new double[landscapeSize];
 
             //Parallel.For(0, landscapeSize, i => {
-            int[] activeSiteIndicesList = ActiveSiteIndices;
-            foreach (int i in activeSiteIndicesList) {
+            foreach (int i in activeSiteIndices) {
                 double beta_t = normalizedWeatherIndex[i] * transmissionRate;
                 double sum = 0.0;
                 (int x, int y) targetCoordinates = precomputedLandscapeCoordinates[i];
-                foreach (int j in activeSiteIndicesList) {
+                foreach ((int x, int y) in precomputedDispersalDistanceOffsets) {
+                    if (targetCoordinates.x + x < 0
+                        || targetCoordinates.x + x >= landscapeDimensions.x
+                        || targetCoordinates.y + y < 0
+                        || targetCoordinates.y + y >= landscapeDimensions.y
+                    ) continue;
+                    int index = CalculateCoordinatesToIndex(x, y, landscapeDimensions.x);
+                    if (!activeSiteIndicesSet.Contains(index + i)) continue;
+                    int j = index + i;
+                    //NOTE: I theoretically don't need this anymore
                     if (i == j) continue;
-                    (int x, int y) sourceCoordinates = precomputedLandscapeCoordinates[j];
-                    (int x, int y) relativeCoordinates = CalculateRelativeGridOffset(targetCoordinates.x, targetCoordinates.y, sourceCoordinates.x, sourceCoordinates.y);
-                    (int x, int y) canonicalizedRelativeCoordinates = CanonicalizeToHalfQuadrant(relativeCoordinates.x, relativeCoordinates.y);
+                    (int x, int y) canonicalizedRelativeCoordinates = CanonicalizeToHalfQuadrant(x, y);
                     if (canonicalizedRelativeCoordinates.x >= distanceDispersalDecayMatrixWidth || canonicalizedRelativeCoordinates.y >= distanceDispersalDecayMatrixHeight) continue;
                     double decay = GetDistanceDispersalDecay(CalculateCoordinatesToIndex(canonicalizedRelativeCoordinates.x, canonicalizedRelativeCoordinates.y, distanceDispersalDecayMatrixWidth));
                     sum += SHIM[i]
