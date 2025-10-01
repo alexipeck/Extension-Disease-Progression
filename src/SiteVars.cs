@@ -153,11 +153,22 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 return activeSiteIndices;
             }
         }
-        /* public static (int x, int y)[] PrecomputedLandscapeCoordinates {
+        public static (int x, int y)[] PrecomputedLandscapeCoordinates {
             get {
                 return precomputedLandscapeCoordinates;
             }
-        } */
+        }
+        public static (int x, int y)[] PrecomputedDispersalDistanceOffsets {
+            get {
+                return precomputedDispersalDistanceOffsets;
+            }
+        }
+
+        public static HashSet<int> ActiveSiteIndicesSet {
+            get {
+                return activeSiteIndicesSet;
+            }
+        }
         public static SHIMode SHIMode {
             get {
                 return siteHostIndexMode;

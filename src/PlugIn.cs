@@ -97,6 +97,10 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             int landscapeX = LandscapeDimensions.x;
             int landscapeY = LandscapeDimensions.y;
             int landscapeSize = landscapeX * landscapeY;
+            int[] activeSiteIndices = ActiveSiteIndices;
+            (int x, int y)[] precomputedLandscapeCoordinates = PrecomputedLandscapeCoordinates;
+            (int x, int y)[] precomputedDispersalDistanceOffsets = PrecomputedDispersalDistanceOffsets;
+            HashSet<int> activeSiteIndicesSet = ActiveSiteIndicesSet;
 
             Stopwatch globalTimer = new Stopwatch();
             globalTimer.Start();
@@ -116,7 +120,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             int[] resproutLifetime = ResproutLifetime;
             
             bool[] willResprout = new bool[landscapeSize];
-            foreach (int i in ActiveSiteIndices) {
+            foreach (int i in activeSiteIndices) {
                 if (resproutLifetime[i] > 0) {
                     double random = rand.NextDouble();
                     if (random <= 0.15) willResprout[i] = true;
@@ -175,8 +179,24 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             ExportNumericalBitmap(SHIM, "./shim_timeline/shim_state", "SHIM");
             
             stopwatch.Start();
-            double SHIMMean = SHIMSum / ModelCore.Landscape.ActiveSiteCount;
-            foreach (int i in ActiveSiteIndices) {
+            //double SHIMMean = SHIMSum / ModelCore.Landscape.ActiveSiteCount;
+            foreach (int i in activeSiteIndices) {
+                (int x, int y) targetCoordinates = PrecomputedLandscapeCoordinates[i];
+                double sum = 0.0;
+                int count = 0;
+                foreach ((int x, int y) in precomputedDispersalDistanceOffsets) {
+                    if (targetCoordinates.x + x < 0
+                        || targetCoordinates.x + x >= landscapeX
+                        || targetCoordinates.y + y < 0
+                        || targetCoordinates.y + y >= landscapeY
+                    ) continue;
+                    int index = CalculateCoordinatesToIndex(x, y, landscapeX);
+                    int j = index + i;
+                    if (!activeSiteIndicesSet.Contains(j)) continue;
+                    sum += SHIM[j];
+                    count++;
+                }
+                double SHIMMean = sum / count;
                 //TODO: Consider adding a branch to skip if SHIM[i] isn't more
                 //      than 0 but mathematically it's fine unless SHIMMean is 0
                 SHIM[i] /= SHIMMean;
@@ -198,7 +218,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     FOIScaled[i] = 0.0;
                 }
             } else {
-                foreach (int i in ActiveSiteIndices) {
+                foreach (int i in activeSiteIndices) {
                     FOIScaled[i] = (FOI[i] - FOImin) / range;
                 }
             }
