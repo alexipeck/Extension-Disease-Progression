@@ -274,7 +274,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         public static double[] CalculateForceOfInfection(int landscapeSize, double[] SHIM) {
             int timeStep = parameters.Timestep;
             //TODO: Needs to be passed in by the config file
-            double diseaseProgressionRatePerUnitTime = 0.02;
+            double diseaseProgressionRatePerUnitTime = 0.0;
             
             double[] FOI = new double[landscapeSize];
             double[] susceptibleProbabilityNew = new double[landscapeSize];
