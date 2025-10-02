@@ -34,11 +34,12 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         int Timestep {get;set;}
         double TransmissionRate { get; set; }
         SHIMode SHIMode { get; set; }
-        Dictionary<ISpecies, List<(ISpecies, double)>> SpeciesTransitionMatrix { get; set; }
+        Dictionary<ISpecies, SpeciesAgeMatrix> SpeciesTransitionAgeMatrix { get; set; }
+        HashSet<ISpecies> InfectedSpeciesLookup { get; set; }
         Dictionary<ISpecies, HostIndex> SpeciesHostIndex { get; set; }
-        List<(ISpecies, double)> GetTransitionMatrixDistribution(ISpecies species);
+        (ISpecies, double)[] GetSpeciesTransitionAgeMatrixDistribution(ISpecies species, ushort age);
         bool TransitionMatrixContainsSpecies(ISpecies species);
-        ISpecies DerivedHealthySpecies { get; set; }
+        ISpecies[] DerivedHealthySpecies { get; set; }
         DistanceDispersalDecayKernel DistanceDispersalDecayKernel { get; set; }
         int DispersalMaxDistance { get; set; }
         IDistanceDispersalDecayKernel DistanceDispersalDecayKernelFunction { get; }
@@ -48,20 +49,30 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
     {
         private int timestep;
         private double transmissionRate;
-        private Dictionary<ISpecies, List<(ISpecies, double)>> speciesTransitionMatrix;
+        private Dictionary<ISpecies, SpeciesAgeMatrix> speciesTransitionAgeMatrix;
+        private HashSet<ISpecies> infectedSpeciesLookup;
         private Dictionary<ISpecies, HostIndex> speciesHostIndex;
-        private ISpecies derivedHealthySpecies;
+        private ISpecies[] derivedHealthySpecies;
         private DistanceDispersalDecayKernel distanceDispersalDecayKernel;
         private int dispersalMaxDistance;
         private IDistanceDispersalDecayKernel distanceDispersalDecayKernelFunction;
         private SHIMode shiMode;
-        public Dictionary<ISpecies, List<(ISpecies, double)>> SpeciesTransitionMatrix
+        public Dictionary<ISpecies, SpeciesAgeMatrix> SpeciesTransitionAgeMatrix
         {
             get {
-                return speciesTransitionMatrix;
+                return speciesTransitionAgeMatrix;
             }
             set {
-                speciesTransitionMatrix = value;
+                speciesTransitionAgeMatrix = value;
+            }
+        }
+        public HashSet<ISpecies> InfectedSpeciesLookup
+        {
+            get {
+                return infectedSpeciesLookup;
+            }
+            set {
+                infectedSpeciesLookup = value;
             }
         }
         public Dictionary<ISpecies, HostIndex> SpeciesHostIndex
@@ -97,7 +108,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             get { return distanceDispersalDecayKernelFunction; }
         }
 
-        public ISpecies DerivedHealthySpecies
+        public ISpecies[] DerivedHealthySpecies
         {
             get {
                 return derivedHealthySpecies;
@@ -129,13 +140,13 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         }
 
         public bool TransitionMatrixContainsSpecies(ISpecies species) {
-            return speciesTransitionMatrix.ContainsKey(species);
+            return infectedSpeciesLookup.Contains(species);
         }
-        public List<(ISpecies, double)> GetTransitionMatrixDistribution(ISpecies species) {
-            if (!speciesTransitionMatrix.TryGetValue(species, out List<(ISpecies, double)> speciesTransitions)) {
+        public (ISpecies, double)[] GetSpeciesTransitionAgeMatrixDistribution(ISpecies species, ushort age) {
+            if (!speciesTransitionAgeMatrix.TryGetValue(species, out SpeciesAgeMatrix speciesAgeMatrix)) {
                 return null;
             }
-            return speciesTransitions;
+            return speciesAgeMatrix.GetDistribution(age);
         }
         public SHIMode SHIMode
         {

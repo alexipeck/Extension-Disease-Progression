@@ -19,7 +19,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             parameters.Timestep = Convert.ToInt32(GetValue(model, "timestep", required: true));
             var transmissionRate = GetValue(model, "transmission_rate", required: true);
             if (transmissionRate is double dtr) parameters.TransmissionRate = dtr;
-            else throw new InputValueException("transmission_rate", "Value must be a floating point number (unquoted).");
+            else throw new InputValueException("transmission_rate", "Value must be a double (unquoted).");
             var shiModeStr = Convert.ToString(GetValue(model, "shi_mode", required: true));
             if (string.IsNullOrWhiteSpace(shiModeStr)) throw new InputValueException("shi_mode", "Missing required key 'shi_mode'.");
             shiModeStr = shiModeStr.ToLowerInvariant();
@@ -153,8 +153,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 if (totalSpecifiedProportion > 1.0) throw new InputValueException(species.Key.Name, $"Proportions for species '{species.Key.Name}' must sum to 1.0 or less (current sum: {totalSpecifiedProportion}).");
                 if (totalSpecifiedProportion != 1.0) species.Value.Insert(0, (null, 1.0 - totalSpecifiedProportion));
             }
-            parameters.SpeciesTransitionMatrix = speciesTransitionMatrix;
-            parameters.DerivedHealthySpecies = speciesOrderList[0];
+            //TODO: DO NOT FORGET TO REENABLE THIS
+            /* parameters.SpeciesTransitionMatrix = speciesTransitionMatrix;
+            parameters.DerivedHealthySpecies = speciesOrderList[0]; */
 
             if (parameters.DistanceDispersalDecayKernelFunction == null) throw new InputValueException("dispersal.kernel", "Failed to construct kernel.");
 
