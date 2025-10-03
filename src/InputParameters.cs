@@ -38,8 +38,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         HashSet<ISpecies> InfectedSpeciesLookup { get; set; }
         Dictionary<ISpecies, HostIndex> SpeciesHostIndex { get; set; }
         (ISpecies, double)[] GetSpeciesTransitionAgeMatrixDistribution(ISpecies species, ushort age);
+        ISpecies GetDesignatedHealthySpecies(ISpecies species);
         bool TransitionMatrixContainsSpecies(ISpecies species);
-        ISpecies[] DerivedHealthySpecies { get; set; }
+        ISpecies[] DesignatedHealthySpecies { get; set; }
         DistanceDispersalDecayKernel DistanceDispersalDecayKernel { get; set; }
         int DispersalMaxDistance { get; set; }
         IDistanceDispersalDecayKernel DistanceDispersalDecayKernelFunction { get; }
@@ -52,7 +53,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         private Dictionary<ISpecies, SpeciesAgeMatrix> speciesTransitionAgeMatrix;
         private HashSet<ISpecies> infectedSpeciesLookup;
         private Dictionary<ISpecies, HostIndex> speciesHostIndex;
-        private ISpecies[] derivedHealthySpecies;
+        private ISpecies[] designatedHealthySpecies;
         private DistanceDispersalDecayKernel distanceDispersalDecayKernel;
         private int dispersalMaxDistance;
         private IDistanceDispersalDecayKernel distanceDispersalDecayKernelFunction;
@@ -108,13 +109,13 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             get { return distanceDispersalDecayKernelFunction; }
         }
 
-        public ISpecies[] DerivedHealthySpecies
+        public ISpecies[] DesignatedHealthySpecies
         {
             get {
-                return derivedHealthySpecies;
+                return designatedHealthySpecies;
             }
             set {
-                derivedHealthySpecies = value;
+                designatedHealthySpecies = value;
             }
         }
         public void SetDistanceDispersalDecayKernelFunction(IDistanceDispersalDecayKernel k) { distanceDispersalDecayKernelFunction = k; }
@@ -148,6 +149,13 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
             return speciesAgeMatrix.GetDistribution(age);
         }
+        public ISpecies GetDesignatedHealthySpecies(ISpecies species) {
+            if (!speciesTransitionAgeMatrix.TryGetValue(species, out SpeciesAgeMatrix speciesAgeMatrix)) {
+                return null;
+            }
+            return speciesAgeMatrix.DesignatedHealthySpecies();
+        }
+        
         public SHIMode SHIMode
         {
             get { return shiMode; }

@@ -376,8 +376,6 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             ModelCore.UI.WriteLine($"DiseaseProgression timestep took: {globalTimer.ElapsedMilliseconds} ms");
         }
         private static void ReplaceAge1InfectedWithHealthy(IEnumerable<ActiveSite> sites, IInputParameters parameters) {
-            //TODO: REENABLE THIS AFTER FIXING THE TOML THING
-            /* List<ISpecies> infectedVariants = parameters.SpeciesTransitionMatrix.Keys.Where(s => !parameters.DerivedHealthySpecies.Contains(s)).ToList();
             Dictionary<ISpecies, Dictionary<ushort, int>> newSiteCohortsDictionary = new Dictionary<ISpecies, Dictionary<ushort, int>>();
             foreach (ActiveSite site in sites) {
                 Location siteLocation = site.Location;
@@ -387,8 +385,13 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     foreach (ICohort cohort in concreteSpeciesCohorts) {
                         Cohort concreteCohort = (Cohort)cohort;
                         ISpecies addAsSpecies;
-                        if (concreteCohort.Data.Age == 1 && infectedVariants.Contains(speciesCohorts.Species)) {
-                            addAsSpecies = parameters.DerivedHealthySpecies;
+                        if (concreteCohort.Data.Age == 1) {
+                            ISpecies designatedHealthySpecies = parameters.GetDesignatedHealthySpecies(speciesCohorts.Species);
+                            if (designatedHealthySpecies == null) {
+                                addAsSpecies = speciesCohorts.Species;
+                            } else {
+                                addAsSpecies = designatedHealthySpecies;
+                            }
                         } else {
                             addAsSpecies = speciesCohorts.Species;
                         }
@@ -418,7 +421,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 foreach (var data in newSiteCohortsDictionary) {
                     data.Value.Clear();
                 }
-            } */
+            }
         }
         private static (bool[] sitesForProportioning,
                         List<int> healthySitesListIndices,
@@ -440,8 +443,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 bool containsHealthySpecies = false;
                 bool containsInfectedSpecies = false;
                 foreach (ISpeciesCohorts speciesCohorts in SiteVars.Cohorts[site]) {
-                    //TODO: REENABLE THIS AFTER FIXING THE TOML THING
-                    /* if (speciesCohorts.Species == parameters.DerivedHealthySpecies) {
+                    ISpecies designatedHealthySpecies = parameters.GetDesignatedHealthySpecies(speciesCohorts.Species);
+                    if (speciesCohorts.Species == designatedHealthySpecies) {
                         containsHealthySpecies = true;
                         foreach (ICohort cohort in speciesCohorts) {
                             healthyBiomass += cohort.Data.Biomass;
@@ -455,7 +458,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                         foreach (ICohort cohort in speciesCohorts) {
                             ignoredBiomass += cohort.Data.Biomass;
                         }
-                    } */
+                    }
                 }
                 int totalBiomass = healthyBiomass + infectedBiomass + ignoredBiomass;
                 byte redIntensity = (byte)Math.Round(((double)infectedBiomass / (double)totalBiomass) * 255.0);

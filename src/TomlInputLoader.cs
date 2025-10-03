@@ -189,7 +189,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             var infectedSpeciesLookup = new HashSet<ISpecies>();
             foreach (var g in groupInfected) foreach (var s in g.Value) infectedSpeciesLookup.Add(s);
             parameters.InfectedSpeciesLookup = infectedSpeciesLookup;
-            parameters.DerivedHealthySpecies = new List<ISpecies>(groupHealthy.Values).ToArray();
+            parameters.DesignatedHealthySpecies = new List<ISpecies>(groupHealthy.Values).ToArray();
 
             var speciesMatrices = new Dictionary<ISpecies, SpeciesAgeMatrix>();
 
@@ -286,8 +286,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             {
                 PlugIn.ModelCore.UI.WriteLine($"    {g}: healthy={groupHealthy[g].Name}, infected=[{string.Join(", ", groupInfected[g])}]");
             }
-            PlugIn.ModelCore.UI.WriteLine("  Derived healthy species:");
-            foreach (var hs in parameters.DerivedHealthySpecies) PlugIn.ModelCore.UI.WriteLine($"    {hs.Name}");
+            PlugIn.ModelCore.UI.WriteLine("  Designated healthy species:");
+            foreach (var hs in parameters.DesignatedHealthySpecies) PlugIn.ModelCore.UI.WriteLine($"    {hs.Name}");
             PlugIn.ModelCore.UI.WriteLine("  Infected species:");
             foreach (var isx in parameters.InfectedSpeciesLookup) PlugIn.ModelCore.UI.WriteLine($"    {isx.Name}");
             PlugIn.ModelCore.UI.WriteLine("  Species age transition matrices:");
