@@ -72,6 +72,22 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     ModelCore.UI.WriteLine($"Emptied folder: {path}");
                 }
             }
+
+            {
+                ModelCore.UI.WriteLine("Starting initial infection map application");
+                bool[] initialInfectionMap = InitialInfectionMap;
+                if (initialInfectionMap != null) {
+                    int index = 0;
+                    foreach (bool value in initialInfectionMap) {
+                        if (value == true) {
+                            ModelCore.UI.WriteLine($"Applying initial infection map to site at index: {index}");
+                        }
+                        index++;
+                    }
+                    ProportionSites(ModelCore.Landscape.ActiveSites, initialInfectionMap, LandscapeDimensions.x, type);
+                }
+                ModelCore.UI.WriteLine("Finished applying initial infection map");
+            }
             
             ModelCore.UI.WriteLine("Disease progression initialized");
         }
@@ -82,8 +98,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             //DumpSiteInformation(ModelCore.Landscape.ActiveSites);
             ModelCore.UI.WriteLine("Running disease progression");
             //////// DEBUG PARAMETERS
-            bool debugOutputTransitions = false;
-            bool debugDumpSiteInformation = false;
+            //bool debugOutputTransitions = false;
+            //bool debugDumpSiteInformation = false;
             //TODO: Image generation gets started in another thread
             //      I need a boolean check to ensure that the thread has stopped
             //      The thread is needed as is can save something like 7 steps per timestep
@@ -235,176 +251,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             ///////////////////
             
             stopwatch.Start();
-            Dictionary<ISpecies, Dictionary<ushort, (int biomass, Dictionary<string, int> additionalParameters)>> newSiteCohortsDictionary = new Dictionary<ISpecies, Dictionary<ushort, (int biomass, Dictionary<string, int> additionalParameters)>>();
-            foreach (ActiveSite site in sites) {
-                Location siteLocation = site.Location;
-                if (!sitesForProportioning[CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX)]) continue;
-                SiteCohorts siteCohorts = SiteVars.Cohorts[site];
-
-                if (debugDumpSiteInformation) {
-                    // Output existing state during timestep before any changes occur
-                    foreach (ISpeciesCohorts speciesCohorts in siteCohorts) {
-                        foreach (ICohort cohort in speciesCohorts) {
-                            ModelCore.UI.WriteLine($"Before disease progression: Site: ({siteLocation.Row},{siteLocation.Column}), Species: {speciesCohorts.Species.Name}, Age: {cohort.Data.Age}, Biomass: {cohort.Data.Biomass}");
-                        }
-                    }
-                }
-                
-                foreach (ISpeciesCohorts speciesCohorts in siteCohorts) {
-                    SpeciesCohorts concreteSpeciesCohorts = (SpeciesCohorts)speciesCohorts;
-                    foreach (ICohort cohort in concreteSpeciesCohorts) {
-                        Cohort concreteCohort = (Cohort)cohort;
-                        ISpecies designatedHealthySpecies = parameters.GetDesignatedHealthySpecies(speciesCohorts.Species);
-
-                        //process entry through matrix
-                        (ISpecies, double)[] transitionDistribution = parameters.GetSpeciesTransitionAgeMatrixDistribution(speciesCohorts.Species, cohort.Data.Age);
-
-                        //no transition will occur
-                        if (transitionDistribution == null) {
-                            if (!newSiteCohortsDictionary.ContainsKey(speciesCohorts.Species)) {
-                                newSiteCohortsDictionary[speciesCohorts.Species] = new Dictionary<ushort, (int biomass, Dictionary<string, int> additionalParameters)>();
-                            }
-                            if (!newSiteCohortsDictionary[speciesCohorts.Species].ContainsKey(concreteCohort.Data.Age)) {
-                                newSiteCohortsDictionary[speciesCohorts.Species][concreteCohort.Data.Age] = (0, new Dictionary<string, int>());
-                            }
-                            (int biomass, Dictionary<string, int> additionalParameters) entry = newSiteCohortsDictionary[speciesCohorts.Species][concreteCohort.Data.Age];
-                            entry.biomass += concreteCohort.Data.Biomass;
-                            foreach (var parameter in concreteCohort.Data.AdditionalParameters) {
-                                if (!entry.additionalParameters.ContainsKey(parameter.Key)) {
-                                    entry.additionalParameters[parameter.Key] = 0;
-                                }
-                                entry.additionalParameters[parameter.Key] += (int)parameter.Value;
-                            }
-                            newSiteCohortsDictionary[speciesCohorts.Species][concreteCohort.Data.Age] = entry;
-                            continue; //short-circuit
-                        }
-
-                        //exists to account for the error created during the cast from float to int
-                        //with low biomass values, the error accumilation can be significant
-                        //biomass being stored as an int is a design issue in landis-core which
-                        //results in biomass not being kept in the live cohort or going to decomposition
-                        //pools as a result of Math.Floor being used in truncation of positive float values
-                        //to int it simply gets discarded
-                        int totalBiomassAccountedFor = 0;
-                        int remainingBiomass = concreteCohort.Data.Biomass;
-
-                        Dictionary<string, int> remainingAdditionalParameters = new Dictionary<string, int>();
-                        Console.WriteLine("ConcreteCohort.Data.AdditionalParameters:");
-                        foreach (var parameter in concreteCohort.Data.AdditionalParameters) {
-                            Console.WriteLine($"1Parameter: {parameter.Key}, Value: {parameter.Value}");
-                            remainingAdditionalParameters[parameter.Key] = (int)parameter.Value;
-                        }
-                        foreach ((ISpecies targetSpecies, double proportion) in transitionDistribution) {
-                            //null case is the no change case within the matrix accounting for either
-                            //the user specified proportion in the case of all proportions for a line
-                            //adding up to 1.0, in all other cases, the null case equals the user specified
-                            //proportion + the remaining proportion
-                            if (targetSpecies != null) {
-                                if (remainingBiomass == 0) {
-                                    break;
-                                }
-                                //ModelCore.UI.WriteLine($"Before rounding: {concreteCohort.Data.Biomass * proportion}");
-                                int transfer = (int)Math.Round(concreteCohort.Data.Biomass * proportion);
-                                //ModelCore.UI.WriteLine($"Rounded: {Math.Round(concreteCohort.Data.Biomass * proportion)}");
-                                //ModelCore.UI.WriteLine($"Cast: {transfer}");
-                                if (remainingBiomass - transfer < 0) {
-                                    transfer = remainingBiomass;
-                                }
-                                remainingBiomass -= transfer;
-                                totalBiomassAccountedFor += transfer;
-                                if (targetSpecies == null || concreteCohort.Data.Biomass == 1) {
-                                    //This is a hacky way to kill miniscule cohorts
-                                    if (concreteCohort.Data.Biomass == 1) {
-                                        transfer = 1;
-                                        remainingBiomass -= transfer;
-                                        totalBiomassAccountedFor += transfer;
-                                    }
-                                    //TODO: Should I be feeding 1.0 for the proportion here so it kills the entire cohort in the case of where biomass == 1?
-                                    Cohort.CohortMortality(concreteSpeciesCohorts, concreteCohort, site, type, (float)proportion);
-                                    if (debugOutputTransitions) {
-                                        ModelCore.UI.WriteLine($"Transitioned to dead: Age: {concreteCohort.Data.Age}, Biomass: {concreteCohort.Data.Biomass}, Species: {speciesCohorts.Species.Name}");
-                                    }
-                                    AddResproutLifetime(CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX), designatedHealthySpecies);
-                                    continue; //short-circuit
-                                }
-
-                                //push biomass to target species cohort
-                                if (!newSiteCohortsDictionary.ContainsKey(targetSpecies)) {
-                                    newSiteCohortsDictionary[targetSpecies] = new Dictionary<ushort, (int biomass, Dictionary<string, int> additionalParameters)>();
-                                }
-                                if (!newSiteCohortsDictionary[targetSpecies].ContainsKey(concreteCohort.Data.Age)) {
-                                    newSiteCohortsDictionary[targetSpecies][concreteCohort.Data.Age] = (0, new Dictionary<string, int>());
-                                }
-                                (int biomass, Dictionary<string, int> additionalParameters) entry = newSiteCohortsDictionary[targetSpecies][concreteCohort.Data.Age];
-                                entry.biomass += transfer;
-                                foreach (var parameter in concreteCohort.Data.AdditionalParameters) {
-                                    if (!entry.additionalParameters.ContainsKey(parameter.Key)) {
-                                        entry.additionalParameters[parameter.Key] = 0;
-                                    }
-                                    entry.additionalParameters[parameter.Key] += (int)parameter.Value;
-                                    remainingAdditionalParameters[parameter.Key] -= (int)parameter.Value;
-                                    Trace.Assert((int)remainingAdditionalParameters[parameter.Key] >= 0);
-                                }
-                                if (!newSiteCohortsDictionary.ContainsKey(speciesCohorts.Species)) {
-                                    newSiteCohortsDictionary[speciesCohorts.Species] = new Dictionary<ushort, (int biomass, Dictionary<string, int> additionalParameters)>();
-                                }
-                                if (!newSiteCohortsDictionary[speciesCohorts.Species].ContainsKey(concreteCohort.Data.Age)) {
-                                    newSiteCohortsDictionary[speciesCohorts.Species][concreteCohort.Data.Age] = (0, new Dictionary<string, int>());
-                                }
-                                newSiteCohortsDictionary[speciesCohorts.Species][concreteCohort.Data.Age] = entry;
-                                if (debugOutputTransitions) {
-                                    ModelCore.UI.WriteLine($"Transferred {concreteCohort.Data.Biomass} biomass from {speciesCohorts.Species.Name} to {targetSpecies.Name}");
-                                }
-                            }
-                        }
-                        //push remaining biomass to original species cohort
-                        if (!newSiteCohortsDictionary.ContainsKey(speciesCohorts.Species)) {
-                            newSiteCohortsDictionary[speciesCohorts.Species] = new Dictionary<ushort, (int biomass, Dictionary<string, int> additionalParameters)>();
-                        }
-                        if (!newSiteCohortsDictionary[speciesCohorts.Species].ContainsKey(concreteCohort.Data.Age)) {
-                            newSiteCohortsDictionary[speciesCohorts.Species][concreteCohort.Data.Age] = (0, new Dictionary<string, int>());
-                        }
-                        var entry_ = newSiteCohortsDictionary[speciesCohorts.Species][concreteCohort.Data.Age];
-                        entry_.biomass += concreteCohort.Data.Biomass - totalBiomassAccountedFor;
-                        entry_.additionalParameters = remainingAdditionalParameters;
-                        newSiteCohortsDictionary[speciesCohorts.Species][concreteCohort.Data.Age] = entry_;
-                    }
-                }
-
-                //rewrite SiteCohorts() regardless of changes
-                //TODO: Create a clone of SiteCohorts minus the cohortData
-                //seemingly not necessary though
-                var newSiteCohorts = new SiteCohorts();
-                foreach (var species in newSiteCohortsDictionary) {
-                    foreach (var cohort in species.Value) {
-                        if (cohort.Value.biomass > 0) {
-                            ExpandoObject additionalParameters = new ExpandoObject();
-                            IDictionary<string, object> additionalParametersDictionary = (IDictionary<string, object>)additionalParameters;
-                            foreach (var parameter in cohort.Value.additionalParameters) {
-                                Console.WriteLine($"2Parameter: {parameter.Key}, Value: {parameter.Value}");
-                                additionalParametersDictionary[parameter.Key] = parameter.Value;
-                            }
-                            newSiteCohorts.AddNewCohort(species.Key, cohort.Key, cohort.Value.biomass, additionalParameters);
-                        }
-                    }
-                }
-                foreach (ISpeciesCohorts speciesCohorts in newSiteCohorts) {
-                    SpeciesCohorts concreteSpeciesCohorts = (SpeciesCohorts)speciesCohorts;
-                    concreteSpeciesCohorts.UpdateMaturePresent();
-                }
-                if (debugDumpSiteInformation) {
-                    // Output existing state during timestep after any changes occur
-                    foreach (ISpeciesCohorts speciesCohorts in newSiteCohorts) {
-                        foreach (ICohort cohort in speciesCohorts) {
-                            ModelCore.UI.WriteLine($"After disease progression: Site: ({site.Location.Row},{site.Location.Column}), Species: {speciesCohorts.Species.Name}, Age: {cohort.Data.Age}, Biomass: {cohort.Data.Biomass}");
-                        }
-                    }
-                }
-                SiteVars.Cohorts[site] = newSiteCohorts;
-                foreach (var data in newSiteCohortsDictionary) {
-                    data.Value.Clear();
-                }
-            }
+            ProportionSites(sites, sitesForProportioning, landscapeX, type);
             ModelCore.UI.WriteLine($"Finished proportioning and rewriting SiteCohorts for all sites: {stopwatch.ElapsedMilliseconds} ms");
             stopwatch.Reset();
             globalTimer.Stop();
