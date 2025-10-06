@@ -20,6 +20,16 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             var transmissionRate = GetValue(model, "transmission_rate", required: true);
             if (transmissionRate is double dtr) parameters.TransmissionRate = dtr;
             else throw new InputValueException("transmission_rate", "Value must be a double (unquoted).");
+            var initialInfectionMap = Convert.ToString(GetValue(model, "initial_infection_map", required: false));
+            if (!string.IsNullOrWhiteSpace(initialInfectionMap))
+            {
+                if (!File.Exists(initialInfectionMap)) throw new InputValueException("initial_infection_map", $"File '{initialInfectionMap}' does not exist.");
+                parameters.InitialInfectionPath = initialInfectionMap;
+            }
+            else
+            {
+                parameters.InitialInfectionPath = null;
+            }
             var shiModeStr = Convert.ToString(GetValue(model, "shi_mode", required: true));
             if (string.IsNullOrWhiteSpace(shiModeStr)) throw new InputValueException("shi_mode", "Missing required key 'shi_mode'.");
             shiModeStr = shiModeStr.ToLowerInvariant();
@@ -261,12 +271,12 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             PlugIn.ModelCore.UI.WriteLine("Configuration summary:");
             PlugIn.ModelCore.UI.WriteLine($"  Timestep: {parameters.Timestep}");
             PlugIn.ModelCore.UI.WriteLine($"  Transmission rate: {parameters.TransmissionRate}");
+            PlugIn.ModelCore.UI.WriteLine($"  Initial infection path: {(parameters.InitialInfectionPath ?? "<none>")}");
             PlugIn.ModelCore.UI.WriteLine($"  Species host index: {speciesHostIndexPath}");
             PlugIn.ModelCore.UI.WriteLine($"  Dispersal kernel: {parameters.DistanceDispersalDecayKernel}");
             PlugIn.ModelCore.UI.WriteLine($"  Dispersal maximum distance: {parameters.DispersalMaxDistance}");
             PlugIn.ModelCore.UI.WriteLine($"  SHI mode: {parameters.SHIMode}");
-            switch (parameters.DistanceDispersalDecayKernel)
-            {
+            switch (parameters.DistanceDispersalDecayKernel) {
                 case DistanceDispersalDecayKernel.NegativeExponent:
                 case DistanceDispersalDecayKernel.PowerLaw:
                     PlugIn.ModelCore.UI.WriteLine($"  Kernel: {parameters.DistanceDispersalDecayKernel}");
@@ -282,8 +292,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             PlugIn.ModelCore.UI.WriteLine("Transition configuration:");
             PlugIn.ModelCore.UI.WriteLine($"  Exhaustive probability: {exhaustiveProbability}");
             PlugIn.ModelCore.UI.WriteLine("  Groups:");
-            foreach (var g in groupHealthy.Keys)
-            {
+            foreach (var g in groupHealthy.Keys) {
                 PlugIn.ModelCore.UI.WriteLine($"    {g}: healthy={groupHealthy[g].Name}, infected=[{string.Join(", ", groupInfected[g])}]");
             }
             PlugIn.ModelCore.UI.WriteLine("  Designated healthy species:");
@@ -291,29 +300,26 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             PlugIn.ModelCore.UI.WriteLine("  Infected species:");
             foreach (var isx in parameters.InfectedSpeciesLookup) PlugIn.ModelCore.UI.WriteLine($"    {isx.Name}");
             PlugIn.ModelCore.UI.WriteLine("  Species age transition matrices:");
-            foreach (var kvp in parameters.SpeciesTransitionAgeMatrix)
-            {
+            foreach (var kvp in parameters.SpeciesTransitionAgeMatrix) {
                 var sp = kvp.Key;
                 var mat = kvp.Value;
                 PlugIn.ModelCore.UI.WriteLine($"    source={sp.Name}, healthy={mat.DesignatedHealthySpecies().Name}");
             }
 
-            foreach (var kvp in parameters.SpeciesTransitionAgeMatrix)
-            {
+            foreach (var kvp in parameters.SpeciesTransitionAgeMatrix) {
                 var sp = kvp.Key;
                 var mat = kvp.Value;
                 var dict = (Dictionary<ushort, (ISpecies, double)[]>)kvp.Value.GetType().GetField("_ageTransitionMatrix", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(kvp.Value);
                 var ages = new List<ushort>(dict.Keys);
-                ages.Sort();
-                foreach (var age in ages)
-                {
+                //ages.Sort();
+                foreach (ushort age in ages) {
                     var dist = dict[age];
                     var parts = new List<string>();
                     foreach (var t in dist)
                     {
                         parts.Add($"{(t.Item1 == null ? "DEAD" : t.Item1.Name)}={t.Item2}");
                     }
-                    PlugIn.ModelCore.UI.WriteLine($"      age {age}: {string.Join(", ", parts)}");
+                    PlugIn.ModelCore.UI.WriteLine($"      species: {sp.Name}, age {age}: {string.Join(", ", parts)}");
                 }
             }
 

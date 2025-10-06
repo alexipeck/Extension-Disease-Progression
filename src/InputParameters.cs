@@ -34,6 +34,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         int Timestep {get;set;}
         double TransmissionRate { get; set; }
         SHIMode SHIMode { get; set; }
+            string InitialInfectionPath { get; set; }
         Dictionary<ISpecies, SpeciesAgeMatrix> SpeciesTransitionAgeMatrix { get; set; }
         HashSet<ISpecies> InfectedSpeciesLookup { get; set; }
         Dictionary<ISpecies, HostIndex> SpeciesHostIndex { get; set; }
@@ -50,6 +51,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
     {
         private int timestep;
         private double transmissionRate;
+            private string initialInfectionPath;
         private Dictionary<ISpecies, SpeciesAgeMatrix> speciesTransitionAgeMatrix;
         private HashSet<ISpecies> infectedSpeciesLookup;
         private Dictionary<ISpecies, HostIndex> speciesHostIndex;
@@ -138,6 +140,12 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         {
             get { return transmissionRate; }
             set { transmissionRate = value; }
+        }
+
+        public string InitialInfectionPath
+        {
+            get { return initialInfectionPath; }
+            set { initialInfectionPath = value; }
         }
 
         public bool TransitionMatrixContainsSpecies(ISpecies species) {

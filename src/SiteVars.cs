@@ -112,6 +112,10 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 }
                 normalizedWeatherIndex = normalizedWeatherIndex_;
             }
+            bool[] initialInfectionMap = ReadInitialInfectionMap(modelCore, parameters.InitialInfectionPath, landscapeDimensions.x * landscapeDimensions.y);
+            if (initialInfectionMap != null) {
+                asdf;
+            }
         }
 
         public static double MinActive(double[] array) {
@@ -674,6 +678,30 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 }
                 bitmap.Save(outputPath, ImageFormat.Png);
             }
+        }
+        
+        public static bool[] ReadInitialInfectionMap(ICore modelCore, string path, int landscapeSize) {
+            if (path == null) return null;
+            bool[] initialInfectionMap = new bool[landscapeSize];
+            IInputRaster<UIntPixel> map = modelCore.OpenRaster<UIntPixel>(path);
+            
+            using (map) {
+                UIntPixel pixel = map.BufferPixel;
+                foreach (Site site in modelCore.Landscape.AllSites) {
+                    map.ReadBufferPixel();
+                    uint mapValue = pixel.MapCode.Value;
+                    
+                    if (site.IsActive) {
+                        if (mapValue == 1) {
+                            Location location = site.Location;
+                            int index = CalculateCoordinatesToIndex(location.Column - 1, location.Row - 1, LandscapeDimensions.x);
+                            initialInfectionMap[index] = true;
+                        }
+                        /* targetSiteVar[site] = (mapValue == 1); */
+                    }
+                }
+            }
+            return initialInfectionMap;
         }
     }
 }
