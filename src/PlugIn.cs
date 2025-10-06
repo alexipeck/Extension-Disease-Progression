@@ -84,7 +84,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                         }
                         index++;
                     }
-                    ProportionSites(ModelCore.Landscape.ActiveSites, initialInfectionMap, LandscapeDimensions.x, type);
+                    ProportionSites(ModelCore.Landscape.ActiveSites, initialInfectionMap, LandscapeDimensions.x, type, true);
                 }
                 ModelCore.UI.WriteLine("Finished applying initial infection map");
             }
@@ -251,7 +251,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             ///////////////////
             
             stopwatch.Start();
-            ProportionSites(sites, sitesForProportioning, landscapeX, type);
+            ProportionSites(sites, sitesForProportioning, landscapeX, type, false);
             ModelCore.UI.WriteLine($"Finished proportioning and rewriting SiteCohorts for all sites: {stopwatch.ElapsedMilliseconds} ms");
             stopwatch.Reset();
             globalTimer.Stop();
@@ -342,14 +342,21 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 bool containsHealthySpecies = false;
                 bool containsInfectedSpecies = false;
                 foreach (ISpeciesCohorts speciesCohorts in SiteVars.Cohorts[site]) {
+                    if (CalculateCoordinatesToIndex(site.Location.Column - 1, site.Location.Row - 1, landscapeX) == 4940) {
+                        Console.WriteLine($"species: {speciesCohorts.Species.Name}");
+                    }
                     ISpecies designatedHealthySpecies = parameters.GetDesignatedHealthySpecies(speciesCohorts.Species);
                     //Console.WriteLine($"Looking at species: {speciesCohorts.Species.Name}{(designatedHealthySpecies != null ? $", it's designated healthy species is: {designatedHealthySpecies.Name}" : "")}");
+                    bool temp = parameters.TransitionMatrixContainsSpecies(speciesCohorts.Species);
+                    if (speciesCohorts.Species.Name == "Queragri_i") {
+                        Console.WriteLine($"species: {speciesCohorts.Species.Name}, transition matrix contains species: {temp}");
+                    }
                     if (designatedHealthySpecies != null && speciesCohorts.Species == designatedHealthySpecies) {
                         containsHealthySpecies = true;
                         foreach (ICohort cohort in speciesCohorts) {
                             healthyBiomass += cohort.Data.Biomass;
                         }
-                    } else if (designatedHealthySpecies != null && parameters.TransitionMatrixContainsSpecies(speciesCohorts.Species)) {
+                    } else if (designatedHealthySpecies != null && temp) {
                         containsInfectedSpecies = true;
                         foreach (ICohort cohort in speciesCohorts) {
                             infectedBiomass += cohort.Data.Biomass;

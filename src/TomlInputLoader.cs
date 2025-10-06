@@ -311,7 +311,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 var mat = kvp.Value;
                 var dict = (Dictionary<ushort, (ISpecies, double)[]>)kvp.Value.GetType().GetField("_ageTransitionMatrix", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(kvp.Value);
                 var ages = new List<ushort>(dict.Keys);
-                //ages.Sort();
+                ages.Sort();
                 foreach (ushort age in ages) {
                     var dist = dict[age];
                     var parts = new List<string>();

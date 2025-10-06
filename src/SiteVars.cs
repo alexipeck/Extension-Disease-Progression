@@ -708,7 +708,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             return initialInfectionMap;
         }
 
-        public static void ProportionSites(IEnumerable<ActiveSite> sites, bool[] sitesForProportioning, int landscapeX, ExtensionType disturbanceType) {
+        public static void ProportionSites(IEnumerable<ActiveSite> sites, bool[] sitesForProportioning, int landscapeX, ExtensionType disturbanceType, bool debugOutputTransitions) {
             Dictionary<ISpecies, Dictionary<ushort, (int biomass, Dictionary<string, int> additionalParameters)>> newSiteCohortsDictionary = new Dictionary<ISpecies, Dictionary<ushort, (int biomass, Dictionary<string, int> additionalParameters)>>();
             foreach (ActiveSite site in sites) {
                 Location siteLocation = site.Location;
@@ -742,6 +742,14 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                             }
                             newSiteCohortsDictionary[speciesCohorts.Species][concreteCohort.Data.Age] = entry;
                             continue; //short-circuit
+                        }
+
+                        
+                        if (debugOutputTransitions) {
+                            if (designatedHealthySpecies != null) {
+                                PlugIn.ModelCore.UI.WriteLine($"designated healthy species: {designatedHealthySpecies.Name}");
+                            }
+                            PlugIn.ModelCore.UI.WriteLine($"species: {speciesCohorts.Species.Name}, age: {concreteCohort.Data.Age}, biomass: {concreteCohort.Data.Biomass}");
                         }
 
                         //exists to account for the error created during the cast from float to int
@@ -785,9 +793,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                                     }
                                     //TODO: Should I be feeding 1.0 for the proportion here so it kills the entire cohort in the case of where biomass == 1?
                                     Cohort.CohortMortality(concreteSpeciesCohorts, concreteCohort, site, disturbanceType, (float)proportion);
-                                    /* if (debugOutputTransitions) {
-                                        ModelCore.UI.WriteLine($"Transitioned to dead: Age: {concreteCohort.Data.Age}, Biomass: {concreteCohort.Data.Biomass}, Species: {speciesCohorts.Species.Name}");
-                                    } */
+                                    if (debugOutputTransitions) {
+                                        PlugIn.ModelCore.UI.WriteLine($"Transitioned to dead: Age: {concreteCohort.Data.Age}, Biomass: {concreteCohort.Data.Biomass}, Species: {speciesCohorts.Species.Name}");
+                                    }
                                     AddResproutLifetime(CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX), designatedHealthySpecies);
                                     continue; //short-circuit
                                 }
@@ -816,9 +824,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                                     newSiteCohortsDictionary[speciesCohorts.Species][concreteCohort.Data.Age] = (0, new Dictionary<string, int>());
                                 }
                                 newSiteCohortsDictionary[speciesCohorts.Species][concreteCohort.Data.Age] = entry;
-                                /* if (debugOutputTransitions) {
-                                    ModelCore.UI.WriteLine($"Transferred {concreteCohort.Data.Biomass} biomass from {speciesCohorts.Species.Name} to {targetSpecies.Name}");
-                                } */
+                                if (debugOutputTransitions) {
+                                    PlugIn.ModelCore.UI.WriteLine($"Transferred {concreteCohort.Data.Biomass} biomass from {speciesCohorts.Species.Name} to {targetSpecies.Name}");
+                                }
                             }
                         }
                         //push remaining biomass to original species cohort
