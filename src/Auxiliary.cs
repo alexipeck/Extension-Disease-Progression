@@ -131,7 +131,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression {
         }
 
         //only supports int value
-        public static Dictionary<string, int> ExtractAdditionalParameters(ExpandoObject additionalParameters) {
+        /* public static Dictionary<string, int> ExtractAdditionalParameters(ExpandoObject additionalParameters) {
             Dictionary<string, int> parameters = new Dictionary<string, int>();
             foreach (var parameter in additionalParameters) {
                 parameters[parameter.Key] = (int)parameter.Value;
@@ -177,7 +177,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression {
                 tempObject.parameter.Key = parameter.Value;
             }
             return tempObject;
-        }
+        } */
         public static void DumpSiteInformation(IEnumerable<ActiveSite> sites) {
             foreach (ActiveSite site in sites) {
                 foreach (ISpeciesCohorts speciesCohorts in SiteVars.Cohorts[site]) {
