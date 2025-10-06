@@ -288,15 +288,6 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                         int totalBiomassAccountedFor = 0;
                         int remainingBiomass = concreteCohort.Data.Biomass;
 
-                        //ensure key for the remaining biomass AND addition parameters is present
-                        /* if (!newSiteCohortsDictionary.ContainsKey(speciesCohorts.Species)) {
-                            newSiteCohortsDictionary[speciesCohorts.Species] = new Dictionary<ushort, (int biomass, Dictionary<string, int> additionalParameters)>();
-                        }
-                        if (!newSiteCohortsDictionary[speciesCohorts.Species].ContainsKey(concreteCohort.Data.Age)) {
-                            newSiteCohortsDictionary[speciesCohorts.Species][concreteCohort.Data.Age] = (0, new Dictionary<string, int>());
-                        }
-
-                        (int biomass, Dictionary<string, int> additionalParameters) remainingEntry = newSiteCohortsDictionary[speciesCohorts.Species][concreteCohort.Data.Age]; */
                         Dictionary<string, int> remainingAdditionalParameters = new Dictionary<string, int>();
                         Console.WriteLine("ConcreteCohort.Data.AdditionalParameters:");
                         foreach (var parameter in concreteCohort.Data.AdditionalParameters) {
@@ -353,6 +344,12 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                                     entry.additionalParameters[parameter.Key] += (int)parameter.Value;
                                     remainingAdditionalParameters[parameter.Key] -= (int)parameter.Value;
                                     Trace.Assert((int)remainingAdditionalParameters[parameter.Key] >= 0);
+                                }
+                                if (!newSiteCohortsDictionary.ContainsKey(speciesCohorts.Species)) {
+                                    newSiteCohortsDictionary[speciesCohorts.Species] = new Dictionary<ushort, (int biomass, Dictionary<string, int> additionalParameters)>();
+                                }
+                                if (!newSiteCohortsDictionary[speciesCohorts.Species].ContainsKey(concreteCohort.Data.Age)) {
+                                    newSiteCohortsDictionary[speciesCohorts.Species][concreteCohort.Data.Age] = (0, new Dictionary<string, int>());
                                 }
                                 newSiteCohortsDictionary[speciesCohorts.Species][concreteCohort.Data.Age] = entry;
                                 if (debugOutputTransitions) {
