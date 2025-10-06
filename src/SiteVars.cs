@@ -23,7 +23,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         private static int distanceDispersalDecayMatrixHeight;
         private static double[] indexOffsetDistanceDispersalDecayMatrix;
         private static (int x, int y) landscapeDimensions;
-        private static int[] resproutLifetime;
+        private static Dictionary<(int siteIndex, ISpecies species), ushort> resproutRemaining;
         private static (int x, int y) worstCaseMaximumDispersalCellDistance;
         private static (int x, int y)[] precomputedDispersalDistanceOffsets;
         private static int[] activeSiteIndices;
@@ -45,14 +45,12 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             universalCohorts = PlugIn.ModelCore.GetSiteVar<SiteCohorts>("Succession.UniversalCohorts");
             landscapeDimensions = (PlugIn.ModelCore.Landscape.Dimensions.Columns, PlugIn.ModelCore.Landscape.Dimensions.Rows);
             speciesHostIndex = parameters.SpeciesHostIndex;
-
             susceptibleProbability = new double[landscapeDimensions.x * landscapeDimensions.y];
             infectedProbability = new double[landscapeDimensions.x * landscapeDimensions.y];
             diseasedProbability = new double[landscapeDimensions.x * landscapeDimensions.y];
 
             int worstCaseMaximumDispersalCellDistanceX = (int)Math.Ceiling(parameters.DispersalMaxDistance / PlugIn.ModelCore.CellLength);
             worstCaseMaximumDispersalCellDistance = (worstCaseMaximumDispersalCellDistanceX, (int)(worstCaseMaximumDispersalCellDistanceX * 0.7071067812) + 1);
-            
             {
                 List<(int x, int y)> precalculatedDispersalDistanceOffsetsList = new List<(int x, int y)>();
                 for (int y = -worstCaseMaximumDispersalCellDistance.y; y <= worstCaseMaximumDispersalCellDistance.y; y++) {
@@ -71,8 +69,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             indexOffsetDistanceDispersalDecayMatrix = GenerateDistanceDispersalDecayMatrix(parameters.DistanceDispersalDecayKernelFunction, PlugIn.ModelCore.CellLength, worstCaseMaximumDispersalCellDistance.x, parameters.DispersalMaxDistance);
             PlugIn.ModelCore.UI.WriteLine("Generating dispersal probability matrix image");
             GenerateDistanceDispersalDecayMatrixImage(indexOffsetDistanceDispersalDecayMatrix);
-            //TODO: Initializes empty for now, but realistically the spinup cycle should add some sites to this
-            resproutLifetime = new int[LandscapeDimensions.x *LandscapeDimensions.y];
+            resproutRemaining = new Dictionary<(int siteIndex, ISpecies species), ushort>();
             //TODO: Add to input parameters
             resproutMaxLongevity = 5/* parameters.ResproutMaxLongevity */;
             //TODO: Add to input parameters
@@ -97,10 +94,6 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 activeSiteIndicesSet = new HashSet<int>(activeSiteIndices);
                 precomputedLandscapeCoordinates = landscapeCoordinates;
             }
-            foreach (int index in activeSiteIndices) {
-                resproutLifetime[index] = resproutMaxLongevity;
-            }
-
             //weather index
             {
                 double[] normalizedWeatherIndex_ = new double[landscapeDimensions.x * landscapeDimensions.y];
@@ -187,11 +180,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 return distanceDispersalDecayMatrixHeight;
             }
         }
-        public static int[] ResproutLifetime {
-            get {
-                return resproutLifetime;
-            }
-        }
+        public static Dictionary<(int siteIndex, ISpecies species), ushort> ResproutRemaining => resproutRemaining;
 
         /* public static int[] PrecalculatedDispersalDistanceOffsets {
             get {
@@ -208,18 +197,35 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             return worstCaseMaximumDispersalCellDistance;
         }
         public static void DecrementResproutLifetimes() {
-            for (int x = 0; x < LandscapeDimensions.x; x++) {
-                for (int y = 0; y < LandscapeDimensions.y; y++) {
-                    int index = CalculateCoordinatesToIndex(x, y, LandscapeDimensions.x);
-                    if (resproutLifetime[index] > 0) resproutLifetime[index]--;
+            if (resproutRemaining.Count == 0) return;
+            List<(int siteIndex, ISpecies species)> toRemove = null;
+            foreach (var key in resproutRemaining.Keys.ToList()) {
+                ushort v = resproutRemaining[key];
+                if (v > 0) v--;
+                if (v == 0) {
+                    if (toRemove == null) toRemove = new List<(int siteIndex, ISpecies species)>();
+                    toRemove.Add(key);
+                } else {
+                    resproutRemaining[key] = v;
                 }
             }
+            if (toRemove != null) {
+                foreach (var k in toRemove) resproutRemaining.Remove(k);
+            }
         }
-        public static void AddResproutLifetime(int x, int y) {
-            //TODO: This is a placeholder, determine a better way to implement lifetime
-            int lifetime = resproutMaxLongevity;
-            int index = CalculateCoordinatesToIndex(x, y, LandscapeDimensions.x);
-            resproutLifetime[index] = Math.Min(resproutLifetime[index] + lifetime, resproutMaxLongevity);    
+        public static void AddResproutLifetime(int siteIndex, ISpecies species) {
+            ISpecies healthySpecies = parameters.GetDesignatedHealthySpecies(species);
+            if (healthySpecies == null) throw new InvalidOperationException($"Designated healthy species not found for {species.Name}.");
+            ushort add = (ushort)Math.Min(resproutMaxLongevity, ushort.MaxValue);
+            ushort current = 0;
+            if (resproutRemaining.TryGetValue((siteIndex, healthySpecies), out ushort existing)) current = existing;
+            uint sum = (uint)current + add;
+            ushort capped = (ushort)Math.Min(sum, (uint)resproutMaxLongevity);
+            if (capped == 0) {
+                resproutRemaining.Remove((siteIndex, healthySpecies));
+            } else {
+                resproutRemaining[(siteIndex, healthySpecies)] = capped;
+            }
         }
         
         /* public static double CalculateTransmissionAndWeatherIndex() {

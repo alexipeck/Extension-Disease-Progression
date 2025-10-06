@@ -85,6 +85,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             ////////
 
             //init
+            Console.WriteLine($"Initializing species age matrix for species: {species.Name}, designated healthy species: {designatedHealthySpecies.Name}");
             _species = species;
             _designatedHealthySpecies = designatedHealthySpecies;
             _ageTransitionMatrix = ageTransitionMatrix;

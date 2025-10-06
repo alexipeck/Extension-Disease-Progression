@@ -54,8 +54,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
        
         public override void Initialize()
         {
-            ModelCore.UI.WriteLine("Species selected for disease progression:");
             SiteVars.Initialize(ModelCore, parameters);
+            ModelCore.UI.WriteLine("Species selected for disease progression:");
             foreach (ISpecies speciesName in parameters.SpeciesTransitionAgeMatrix.Keys) {
                 ModelCore.UI.WriteLine($"{speciesName.Name}");
             }
@@ -79,6 +79,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         //---------------------------------------------------------------------
         public override void Run()
         {
+            //DumpSiteInformation(ModelCore.Landscape.ActiveSites);
             ModelCore.UI.WriteLine("Running disease progression");
             //////// DEBUG PARAMETERS
             bool debugOutputTransitions = false;
@@ -115,26 +116,19 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             ////////
 
             ////////Resprouting TODO: REWORK
-            //TODO: REENABLE SPROUTING AFTER FIXING THE TOML THING
-            /* stopwatch.Start();
-            int[] resproutLifetime = ResproutLifetime;
-            
-            bool[] willResprout = new bool[landscapeSize];
-            foreach (int i in activeSiteIndices) {
-                if (resproutLifetime[i] > 0) {
-                    double random = rand.NextDouble();
-                    if (random <= 0.15) willResprout[i] = true;
-                }
-            }
-            DecrementResproutLifetimes();
-            ISpecies derivedHealthySpecies = parameters.DerivedHealthySpecies;
-            foreach (ActiveSite site in sites) {
-                Location siteLocation = site.Location;
-                if (!willResprout[CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX)]) continue;
-                Reproduction.AddNewCohort(derivedHealthySpecies, site, "resprout", 0);
-            }
+            stopwatch.Start();
+			foreach (KeyValuePair<(int siteIndex, ISpecies species), ushort> entry in ResproutRemaining) {
+				if (entry.Value == 0) continue;
+				double random = rand.NextDouble();
+				if (random <= 0.15) {
+					(int x, int y) coordinates = PrecomputedLandscapeCoordinates[entry.Key.siteIndex];
+					ActiveSite site = ModelCore.Landscape[new Location(coordinates.y + 1, coordinates.x + 1)];
+					Reproduction.AddNewCohort(entry.Key.species, site, "resprout", 0);
+				}
+			}
+			DecrementResproutLifetimes();
             ModelCore.UI.WriteLine($"Finished resprouting: {stopwatch.ElapsedMilliseconds} ms");
-            stopwatch.Reset(); */
+            stopwatch.Reset();
             ////////
 
             stopwatch.Start();
@@ -314,9 +308,10 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                                     if (debugOutputTransitions) {
                                         ModelCore.UI.WriteLine($"Transitioned to dead: Age: {concreteCohort.Data.Age}, Biomass: {concreteCohort.Data.Biomass}, Species: {speciesCohorts.Species.Name}");
                                     }
-                                    AddResproutLifetime(siteLocation.Row - 1, siteLocation.Column - 1);
+                                    AddResproutLifetime(CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX), speciesCohorts.Species);
                                     continue; //short-circuit
                                 }
+                                //var t = concreteCohort.Data.AdditionalParameters;
 
                                 //push biomass to target species cohort
                                 if (!newSiteCohortsDictionary.ContainsKey(targetSpecies)) {
@@ -376,7 +371,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             ModelCore.UI.WriteLine($"DiseaseProgression timestep took: {globalTimer.ElapsedMilliseconds} ms");
         }
         private static void ReplaceAge1InfectedWithHealthy(IEnumerable<ActiveSite> sites, IInputParameters parameters) {
-            Dictionary<ISpecies, Dictionary<ushort, int>> newSiteCohortsDictionary = new Dictionary<ISpecies, Dictionary<ushort, int>>();
+            Dictionary<ISpecies, Dictionary<ushort, (int biomass, Dictionary<string, int> additionalParameters)>> newSiteCohortsDictionary = new Dictionary<ISpecies, Dictionary<ushort, (int biomass, Dictionary<string, int> additionalParameters)>>();
             foreach (ActiveSite site in sites) {
                 Location siteLocation = site.Location;
                 SiteCohorts siteCohorts = SiteVars.Cohorts[site];
@@ -396,20 +391,37 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                             addAsSpecies = speciesCohorts.Species;
                         }
                         if (!newSiteCohortsDictionary.ContainsKey(addAsSpecies)) {
-                            newSiteCohortsDictionary[addAsSpecies] = new Dictionary<ushort, int>();
+                            newSiteCohortsDictionary[addAsSpecies] = new Dictionary<ushort, (int biomass, Dictionary<string, int> additionalParameters)>();
                         }
                         if (!newSiteCohortsDictionary[addAsSpecies].ContainsKey(concreteCohort.Data.Age)) {
-                            newSiteCohortsDictionary[addAsSpecies][concreteCohort.Data.Age] = 0;
+                            newSiteCohortsDictionary[addAsSpecies][concreteCohort.Data.Age] = (0, new Dictionary<string, int>());
                         }
-                        newSiteCohortsDictionary[addAsSpecies][concreteCohort.Data.Age] += concreteCohort.Data.Biomass;
+                        (int biomass, Dictionary<string, int> additionalParameters) entry = newSiteCohortsDictionary[addAsSpecies][concreteCohort.Data.Age];
+                        entry.biomass += concreteCohort.Data.Biomass;
+                        foreach (var parameter in concreteCohort.Data.AdditionalParameters) {
+                            //Console.WriteLine($"EXISTING Parameter: {parameter.Key}, Value: {parameter.Value}");
+                            if (!entry.additionalParameters.ContainsKey(parameter.Key)) {
+                                entry.additionalParameters[parameter.Key] = 0;
+                            }
+                            entry.additionalParameters[parameter.Key] += (int)parameter.Value;
+                        }
+                        newSiteCohortsDictionary[addAsSpecies][concreteCohort.Data.Age] = entry;
                     }
                 }
 
                 SiteCohorts newSiteCohorts_ = new SiteCohorts();
                 foreach (var species in newSiteCohortsDictionary) {
                     foreach (var cohort in species.Value) {
-                        if (cohort.Value > 0) {
-                            newSiteCohorts_.AddNewCohort(species.Key, cohort.Key, cohort.Value, new ExpandoObject());
+                        //Console.WriteLine($"NEW Cohort: age: {cohort.Key}, Biomass: {cohort.Value.biomass}");
+                        if (cohort.Value.biomass > 0) {
+                            //Console.WriteLine($"TEST Cohort: age: {cohort.Key}, Biomass: {cohort.Value.biomass}");
+                            ExpandoObject additionalParameters = new ExpandoObject();
+                            dynamic tempObject = additionalParameters;
+                            foreach (var parameter in cohort.Value.additionalParameters) {
+                                //Console.WriteLine($"Parameter: {parameter.Key}, Value: {parameter.Value}");
+                                tempObject.Key = parameter.Value;
+                            }
+                            newSiteCohorts_.AddNewCohort(species.Key, cohort.Key, cohort.Value.biomass, additionalParameters);
                         }
                     }
                 }
@@ -444,12 +456,13 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 bool containsInfectedSpecies = false;
                 foreach (ISpeciesCohorts speciesCohorts in SiteVars.Cohorts[site]) {
                     ISpecies designatedHealthySpecies = parameters.GetDesignatedHealthySpecies(speciesCohorts.Species);
-                    if (speciesCohorts.Species == designatedHealthySpecies) {
+                    //Console.WriteLine($"Looking at species: {speciesCohorts.Species.Name}{(designatedHealthySpecies != null ? $", it's designated healthy species is: {designatedHealthySpecies.Name}" : "")}");
+                    if (designatedHealthySpecies != null && speciesCohorts.Species == designatedHealthySpecies) {
                         containsHealthySpecies = true;
                         foreach (ICohort cohort in speciesCohorts) {
                             healthyBiomass += cohort.Data.Biomass;
                         }
-                    } else if (parameters.TransitionMatrixContainsSpecies(speciesCohorts.Species)) {
+                    } else if (designatedHealthySpecies != null && parameters.TransitionMatrixContainsSpecies(speciesCohorts.Species)) {
                         containsInfectedSpecies = true;
                         foreach (ICohort cohort in speciesCohorts) {
                             infectedBiomass += cohort.Data.Biomass;

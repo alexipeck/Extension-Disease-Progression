@@ -1,8 +1,12 @@
 
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Dynamic;
 using System.Threading.Tasks;
+using Landis.Library.UniversalCohorts;
+using Landis.SpatialModeling;
 
 namespace Landis.Extension.Disturbance.DiseaseProgression {
     public static class Auxiliary {
@@ -124,6 +128,64 @@ namespace Landis.Extension.Disturbance.DiseaseProgression {
 				j--;
 			}
 			return new string(buf);
+        }
+
+        //only supports int value
+        public static Dictionary<string, int> ExtractAdditionalParameters(ExpandoObject additionalParameters) {
+            Dictionary<string, int> parameters = new Dictionary<string, int>();
+            foreach (var parameter in additionalParameters) {
+                parameters[parameter.Key] = (int)parameter.Value;
+            }
+            return parameters;
+        }
+
+        //only supports int value
+        public static ExpandoObject ProportionallyShrinkAdditionalParameters(ExpandoObject additionalParameters, int newTotalBiomass) {
+            ExpandoObject newAdditionalParameters = new ExpandoObject();
+            dynamic tempObject = newAdditionalParameters;
+            int sum = 0;
+            string largestKey = null;
+            int largestValue = 0;
+            foreach (var parameter in additionalParameters) {
+                if (largestKey == null) {
+                    largestKey = parameter.Key;
+                    largestValue = (int)parameter.Value;
+                } else {
+                    if ((int)parameter.Value > largestValue) {
+                        largestKey = parameter.Key;
+                        largestValue = (int)parameter.Value;
+                    }
+                }
+                sum += (int)parameter.Value;
+            }
+            if (largestKey == null) {
+                return newAdditionalParameters;
+            }
+            double biomassRatio = (double)newTotalBiomass / (double)sum;
+            int remaining = newTotalBiomass;
+            Dictionary<string, int> parameters = new Dictionary<string, int>();
+            foreach (var parameter in additionalParameters) {
+                double proportion = (int)parameter.Value / sum;
+                int value = (int)((int)parameter.Value * proportion * biomassRatio);
+                remaining -= value;
+                parameters[parameter.Key] = value;
+            }
+            if (remaining > 0) {
+                parameters[largestKey] += remaining;
+            }
+            foreach (var parameter in parameters) {
+                tempObject.parameter.Key = parameter.Value;
+            }
+            return tempObject;
+        }
+        public static void DumpSiteInformation(IEnumerable<ActiveSite> sites) {
+            foreach (ActiveSite site in sites) {
+                foreach (ISpeciesCohorts speciesCohorts in SiteVars.Cohorts[site]) {
+                    foreach (ICohort cohort in speciesCohorts) {
+                        Console.WriteLine($"Species: {speciesCohorts.Species.Name}, biomass: {cohort.Data.Biomass}");
+                    }
+                }
+            }
         }
     }
 }
