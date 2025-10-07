@@ -347,16 +347,12 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     }
                     ISpecies designatedHealthySpecies = parameters.GetDesignatedHealthySpecies(speciesCohorts.Species);
                     //Console.WriteLine($"Looking at species: {speciesCohorts.Species.Name}{(designatedHealthySpecies != null ? $", it's designated healthy species is: {designatedHealthySpecies.Name}" : "")}");
-                    bool temp = parameters.TransitionMatrixContainsSpecies(speciesCohorts.Species);
-                    if (speciesCohorts.Species.Name == "Queragri_i") {
-                        Console.WriteLine($"species: {speciesCohorts.Species.Name}, transition matrix contains species: {temp}");
-                    }
                     if (designatedHealthySpecies != null && speciesCohorts.Species == designatedHealthySpecies) {
                         containsHealthySpecies = true;
                         foreach (ICohort cohort in speciesCohorts) {
                             healthyBiomass += cohort.Data.Biomass;
                         }
-                    } else if (designatedHealthySpecies != null && temp) {
+                    } else if (designatedHealthySpecies != null && parameters.TransitionMatrixContainsSpecies(speciesCohorts.Species)) {
                         containsInfectedSpecies = true;
                         foreach (ICohort cohort in speciesCohorts) {
                             infectedBiomass += cohort.Data.Biomass;

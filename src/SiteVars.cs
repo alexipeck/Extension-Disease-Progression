@@ -809,12 +809,17 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                                 }
                                 (int biomass, Dictionary<string, int> additionalParameters) entry = newSiteCohortsDictionary[targetSpecies][concreteCohort.Data.Age];
                                 entry.biomass += transfer;
+                                double scale = concreteCohort.Data.Biomass > 0 ? (double)transfer / concreteCohort.Data.Biomass : 0.0;
                                 foreach (var parameter in concreteCohort.Data.AdditionalParameters) {
+                                    //Console.WriteLine($"P Parameter: {parameter.Key}, Value: {parameter.Value}");
                                     if (!entry.additionalParameters.ContainsKey(parameter.Key)) {
                                         entry.additionalParameters[parameter.Key] = 0;
                                     }
-                                    entry.additionalParameters[parameter.Key] += (int)parameter.Value;
-                                    remainingAdditionalParameters[parameter.Key] -= (int)parameter.Value;
+                                    int available = remainingAdditionalParameters[parameter.Key];
+                                    int desiredAlloc = (int)Math.Round(((int)parameter.Value) * scale);
+                                    int alloc = remainingBiomass == 0 ? available : Math.Min(desiredAlloc, available);
+                                    entry.additionalParameters[parameter.Key] += alloc;
+                                    remainingAdditionalParameters[parameter.Key] -= alloc;
                                     Trace.Assert((int)remainingAdditionalParameters[parameter.Key] >= 0);
                                 }
                                 if (!newSiteCohortsDictionary.ContainsKey(speciesCohorts.Species)) {
@@ -823,9 +828,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                                 if (!newSiteCohortsDictionary[speciesCohorts.Species].ContainsKey(concreteCohort.Data.Age)) {
                                     newSiteCohortsDictionary[speciesCohorts.Species][concreteCohort.Data.Age] = (0, new Dictionary<string, int>());
                                 }
-                                newSiteCohortsDictionary[speciesCohorts.Species][concreteCohort.Data.Age] = entry;
+                                newSiteCohortsDictionary[targetSpecies][concreteCohort.Data.Age] = entry;
                                 if (debugOutputTransitions) {
-                                    PlugIn.ModelCore.UI.WriteLine($"Transferred {concreteCohort.Data.Biomass} biomass from {speciesCohorts.Species.Name} to {targetSpecies.Name}");
+                                    PlugIn.ModelCore.UI.WriteLine($"Transferred {transfer} biomass from {speciesCohorts.Species.Name} to {targetSpecies.Name}");
                                 }
                             }
                         }
@@ -852,8 +857,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                         if (cohort.Value.biomass > 0) {
                             ExpandoObject additionalParameters = new ExpandoObject();
                             IDictionary<string, object> additionalParametersDictionary = (IDictionary<string, object>)additionalParameters;
+                            Console.WriteLine($"F biomass: {cohort.Value.biomass}, age: {cohort.Key}, species: {species.Key.Name}");
                             foreach (var parameter in cohort.Value.additionalParameters) {
-                                //Console.WriteLine($"2Parameter: {parameter.Key}, Value: {parameter.Value}");
+                                Console.WriteLine($"F Parameter: {parameter.Key}, Value: {parameter.Value}");
                                 additionalParametersDictionary[parameter.Key] = parameter.Value;
                             }
                             newSiteCohorts.AddNewCohort(species.Key, cohort.Key, cohort.Value.biomass, additionalParameters);
