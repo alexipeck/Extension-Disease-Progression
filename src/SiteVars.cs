@@ -809,15 +809,16 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                                 }
                                 (int biomass, Dictionary<string, int> additionalParameters) entry = newSiteCohortsDictionary[targetSpecies][concreteCohort.Data.Age];
                                 entry.biomass += transfer;
-                                double scale = concreteCohort.Data.Biomass > 0 ? (double)transfer / concreteCohort.Data.Biomass : 0.0;
+                                int originalBiomass = concreteCohort.Data.Biomass;
                                 foreach (var parameter in concreteCohort.Data.AdditionalParameters) {
                                     //Console.WriteLine($"P Parameter: {parameter.Key}, Value: {parameter.Value}");
                                     if (!entry.additionalParameters.ContainsKey(parameter.Key)) {
                                         entry.additionalParameters[parameter.Key] = 0;
                                     }
                                     int available = remainingAdditionalParameters[parameter.Key];
-                                    int desiredAlloc = (int)Math.Round(((int)parameter.Value) * scale);
-                                    int alloc = remainingBiomass == 0 ? available : Math.Min(desiredAlloc, available);
+                                    int alloc = originalBiomass > 0 ? (int)(((long)available * transfer + (originalBiomass / 2)) / originalBiomass) : 0;
+                                    if (alloc < 0) alloc = 0;
+                                    if (alloc > available) alloc = available;
                                     entry.additionalParameters[parameter.Key] += alloc;
                                     remainingAdditionalParameters[parameter.Key] -= alloc;
                                     Trace.Assert((int)remainingAdditionalParameters[parameter.Key] >= 0);
