@@ -4,6 +4,7 @@ using System.IO;
 using Landis.Core;
 using Landis.Utilities;
 using Tomlyn;
+using System.Linq;
 
 namespace Landis.Extension.Disturbance.DiseaseProgression
 {
@@ -19,7 +20,17 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             parameters.Timestep = Convert.ToInt32(GetValue(model, "timestep", required: true));
             var transmissionRate = GetValue(model, "transmission_rate", required: true);
             if (transmissionRate is double dtr) parameters.TransmissionRate = dtr;
-            else throw new InputValueException("transmission_rate", "Value must be a floating point number (unquoted).");
+            else throw new InputValueException("transmission_rate", "Value must be a double (unquoted).");
+            var initialInfectionMap = Convert.ToString(GetValue(model, "initial_infection_map", required: false));
+            if (!string.IsNullOrWhiteSpace(initialInfectionMap))
+            {
+                if (!File.Exists(initialInfectionMap)) throw new InputValueException("initial_infection_map", $"File '{initialInfectionMap}' does not exist.");
+                parameters.InitialInfectionPath = initialInfectionMap;
+            }
+            else
+            {
+                parameters.InitialInfectionPath = null;
+            }
             var shiModeStr = Convert.ToString(GetValue(model, "shi_mode", required: true));
             if (string.IsNullOrWhiteSpace(shiModeStr)) throw new InputValueException("shi_mode", "Missing required key 'shi_mode'.");
             shiModeStr = shiModeStr.ToLowerInvariant();
@@ -73,7 +84,6 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
 
             var speciesHostIndexPath = Convert.ToString(GetValue(model, "species_host_index", required: true));
-            var speciesMatrixPath = Convert.ToString(GetValue(model, "species_matrix", required: true));
 
             var speciesNameToISpecies = new Dictionary<string, ISpecies>(StringComparer.OrdinalIgnoreCase);
             foreach (var species in PlugIn.ModelCore.Species) speciesNameToISpecies[species.Name] = species;
@@ -116,58 +126,176 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
             parameters.SpeciesHostIndex = speciesHostIndex;
 
-            var speciesOrderList = new List<ISpecies>();
-            var speciesTransitionMatrix = new Dictionary<ISpecies, List<(ISpecies, double)>>();
-            lineNum = -1;
-            List<string> columnHeaders = null;
-            foreach (string line in File.ReadLines(speciesMatrixPath))
-            {
-                lineNum++;
-                string trimmed = line.Trim();
-                if (string.IsNullOrEmpty(trimmed)) continue;
-                string[] columns = trimmed.Split(',');
-                if (lineNum == 0)
-                {
-                    columnHeaders = new List<string>(columns);
-                    if (columnHeaders.Count < 3) throw new InputValueException(speciesMatrixPath, "Species matrix file must have at least 3 columns (source species, target species, and DEAD).");
-                    if (columnHeaders[columnHeaders.Count - 1].ToUpper() != "DEAD") throw new InputValueException(speciesMatrixPath, "Last column must be 'DEAD' (case-insensitive).");
-                    continue;
-                }
-                if (!speciesNameToISpecies.TryGetValue(columns[0], out ISpecies sourceSpecies)) throw new InputValueException(columns[0], $"Species '{columns[0]}' on line {lineNum} of SpeciesMatrix file does not exist in scenario species list.2");
-                speciesOrderList.Add(sourceSpecies);
-                speciesTransitionMatrix[sourceSpecies] = new List<(ISpecies, double)>();
-                for (int i = 1; i < columns.Length; i++)
-                {
-                    if (!double.TryParse(columns[i], out double proportion)) throw new InputValueException(columns[i], $"Invalid proportion value '{columns[i]}' on line {lineNum}, column {i + 1}.");
-                    if (proportion < 0.0) throw new InputValueException(columns[i], $"Proportion value '{columns[i]}' on line {lineNum}, column {i + 1} must not be less than 0.0");
-                    if (proportion > 1.0) throw new InputValueException(columns[i], $"Proportion value '{columns[i]}' on line {lineNum}, column {i + 1} must be less than or equal to 1.0");
-                    if (columnHeaders[i].ToUpper() == "DEAD") columnHeaders[i] = "DEAD";
-                    if (!speciesNameToISpecies.TryGetValue(columnHeaders[i], out ISpecies targetSpecies)) throw new InputValueException(columnHeaders[i], $"Species '{columnHeaders[i]}' on line {lineNum} of SpeciesMatrix file does not exist in scenario species list.3");
-                    if (proportion > 0.0) speciesTransitionMatrix[sourceSpecies].Add((targetSpecies, proportion));
-                }
+            var transitionTable = GetTable(model, "transition", required: true) as IDictionary<string, object>;
+            if (transitionTable == null) throw new InputValueException("transition", "Missing required [transition] section.");
+            var validationDefaultsTable = GetNestedValue(transitionTable, new[] { "validation", "default" }, required: true) as IDictionary<string, object>;
+            if (validationDefaultsTable == null) throw new InputValueException("transition.validation.default", "Missing required [transition.validation.default] section.");
+
+            bool exhaustiveProbability = false;
+            if (!validationDefaultsTable.TryGetValue("exhaustive_probability", out var exhaustiveObj) || exhaustiveObj == null) throw new InputValueException("transition.validation.default.exhaustive_probability", "Missing required key 'exhaustive_probability'.");
+            exhaustiveProbability = Convert.ToBoolean(exhaustiveObj);
+            double exhaustiveProbabilityTolerance = 1e-9;
+            if (validationDefaultsTable.TryGetValue("exhaustive_probability_tolerance", out var epsObj) && epsObj != null) {
+                exhaustiveProbabilityTolerance = Convert.ToDouble(epsObj);
+                if (exhaustiveProbabilityTolerance < 0) throw new InputValueException("transition.validation.default.exhaustive_probability_tolerance", "Tolerance must be 0 or greater.");
             }
-            foreach (var species in speciesTransitionMatrix)
+
+            string defaultBelow = Convert.ToString(validationDefaultsTable.ContainsKey("missing_below_range_method") ? validationDefaultsTable["missing_below_range_method"] : "error");
+            string defaultInRange = Convert.ToString(validationDefaultsTable.ContainsKey("missing_in_range_method") ? validationDefaultsTable["missing_in_range_method"] : "error");
+            string defaultAbove = Convert.ToString(validationDefaultsTable.ContainsKey("missing_above_range_method") ? validationDefaultsTable["missing_above_range_method"] : "error");
+
+            MissingBelowRangeMethod ParseBelow(string s)
             {
-                double totalSpecifiedProportion = 0.0;
-                foreach ((ISpecies transitionToSpecies, double proportion) in species.Value) totalSpecifiedProportion += proportion;
-                if (totalSpecifiedProportion > 1.0) throw new InputValueException(species.Key.Name, $"Proportions for species '{species.Key.Name}' must sum to 1.0 or less (current sum: {totalSpecifiedProportion}).");
-                if (totalSpecifiedProportion != 1.0) species.Value.Insert(0, (null, 1.0 - totalSpecifiedProportion));
+                if (string.Equals(s, "ignore", StringComparison.OrdinalIgnoreCase)) return MissingBelowRangeMethod.Ignore;
+                if (string.Equals(s, "error", StringComparison.OrdinalIgnoreCase)) return MissingBelowRangeMethod.Error;
+                throw new InputValueException("transition.validation.default.missing_below_range_method", "Valid values: ignore, error");
             }
-            parameters.SpeciesTransitionMatrix = speciesTransitionMatrix;
-            parameters.DerivedHealthySpecies = speciesOrderList[0];
+            MissingInRangeMethod ParseInRange(string s)
+            {
+                if (string.Equals(s, "error", StringComparison.OrdinalIgnoreCase)) return MissingInRangeMethod.Error;
+                if (string.Equals(s, "age_threshold", StringComparison.OrdinalIgnoreCase)) return MissingInRangeMethod.AgeThreshold;
+                if (string.Equals(s, "linear_interpolation", StringComparison.OrdinalIgnoreCase)) return MissingInRangeMethod.LinearInterpolation;
+                throw new InputValueException("transition.validation.default.missing_in_range_method", "Valid values: error, age_threshold, linear_interpolation");
+            }
+            MissingAboveRangeMethod ParseAbove(string s)
+            {
+                if (string.Equals(s, "error", StringComparison.OrdinalIgnoreCase)) return MissingAboveRangeMethod.Error;
+                if (string.Equals(s, "use_oldest", StringComparison.OrdinalIgnoreCase)) return MissingAboveRangeMethod.UseOldest;
+                if (string.Equals(s, "kill_all", StringComparison.OrdinalIgnoreCase)) return MissingAboveRangeMethod.KillAll;
+                if (string.Equals(s, "ignore", StringComparison.OrdinalIgnoreCase)) return MissingAboveRangeMethod.Ignore;
+                throw new InputValueException("transition.validation.default.missing_above_range_method", "Valid values: error, use_oldest, kill_all, ignore");
+            }
+
+            var groupTable = GetNestedValue(transitionTable, new[] { "group" }, required: true) as IDictionary<string, object>;
+            if (groupTable == null) throw new InputValueException("transition.group", "Missing required [transition.group] section.");
+
+            var speciesToGroup = new Dictionary<ISpecies, string>();
+            var groupHealthy = new Dictionary<string, ISpecies>(StringComparer.OrdinalIgnoreCase);
+            var groupInfected = new Dictionary<string, HashSet<ISpecies>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var kv in groupTable)
+            {
+                var groupName = kv.Key;
+                var groupConfig = kv.Value as IDictionary<string, object>;
+                if (groupConfig == null) throw new InputValueException($"transition.group.{groupName}", $"[transition.group.{groupName}] must be a table.");
+                if (!groupConfig.TryGetValue("healthy_species", out var healthyObj) || healthyObj == null) throw new InputValueException($"transition.group.{groupName}.healthy_species", "Missing required key 'healthy_species'.");
+                string healthyName = Convert.ToString(healthyObj);
+                if (!speciesNameToISpecies.TryGetValue(healthyName, out ISpecies healthySpecies)) throw new InputValueException(healthyName, $"Species '{healthyName}' in transition.group.{groupName}.healthy_species does not exist.");
+                groupHealthy[groupName] = healthySpecies;
+                if (!groupInfected.ContainsKey(groupName)) groupInfected[groupName] = new HashSet<ISpecies>();
+                if (!groupConfig.TryGetValue("infected_pseudo_species", out var infectedObj) || infectedObj == null) throw new InputValueException($"transition.group.{groupName}.infected_pseudo_species", "Missing required key 'infected_pseudo_species'.");
+                if (infectedObj is IEnumerable<object> arr)
+                {
+                    foreach (var sp in arr)
+                    {
+                        string n = Convert.ToString(sp);
+                        if (!speciesNameToISpecies.TryGetValue(n, out ISpecies sps)) throw new InputValueException(n, $"Species '{n}' in transition.group.{groupName}.infected_pseudo_species does not exist.");
+                        if (speciesToGroup.ContainsKey(sps)) throw new InputValueException(n, $"Species '{n}' is assigned to multiple groups.");
+                        speciesToGroup[sps] = groupName;
+                        groupInfected[groupName].Add(sps);
+                    }
+                }
+                else throw new InputValueException($"transition.group.{groupName}.infected_pseudo_species", "infected_pseudo_species must be an array.");
+                if (speciesToGroup.ContainsKey(healthySpecies)) throw new InputValueException(healthyName, $"Species '{healthyName}' is assigned to multiple groups.");
+                speciesToGroup[healthySpecies] = groupName;
+            }
+
+            var dataTable = GetNestedValue(transitionTable, new[] { "data" }, required: true) as IDictionary<string, object>;
+            if (dataTable == null) throw new InputValueException("transition.data", "Missing required [transition.data] section.");
+
+            var infectedSpeciesLookup = new HashSet<ISpecies>();
+            foreach (var g in groupInfected) foreach (var s in g.Value) infectedSpeciesLookup.Add(s);
+            parameters.InfectedSpeciesLookup = infectedSpeciesLookup;
+            parameters.DesignatedHealthySpecies = new List<ISpecies>(groupHealthy.Values).ToArray();
+
+            var speciesMatrices = new Dictionary<ISpecies, SpeciesAgeMatrix>();
+
+            MissingBelowRangeMethod defaultBelowEnum = ParseBelow(defaultBelow);
+            MissingInRangeMethod defaultInRangeEnum = ParseInRange(defaultInRange);
+            MissingAboveRangeMethod defaultAboveEnum = ParseAbove(defaultAbove);
+
+            foreach (var kv in dataTable)
+            {
+                string sourceName = kv.Key;
+                if (!speciesNameToISpecies.TryGetValue(sourceName, out ISpecies sourceSpecies)) throw new InputValueException(sourceName, $"Species '{sourceName}' in [transition.data.{sourceName}] does not exist.");
+                if (!speciesToGroup.TryGetValue(sourceSpecies, out string groupName)) throw new InputValueException(sourceName, $"Species '{sourceName}' in [transition.data.{sourceName}] is not assigned to any group.");
+                var table = kv.Value as IDictionary<string, object>;
+                if (table == null) throw new InputValueException($"transition.data.{sourceName}", $"[transition.data.{sourceName}] must be a table.");
+
+                MissingBelowRangeMethod below = defaultBelowEnum;
+                MissingInRangeMethod inRange = defaultInRangeEnum;
+                MissingAboveRangeMethod above = defaultAboveEnum;
+                bool exhaustiveLocal = exhaustiveProbability;
+                double toleranceLocal = exhaustiveProbabilityTolerance;
+                if (groupTable[groupName] is IDictionary<string, object> groupCfg)
+                {
+                    if (groupCfg.TryGetValue("missing_below_range_method", out var gb) && gb != null) below = ParseBelow(Convert.ToString(gb));
+                    if (groupCfg.TryGetValue("missing_in_range_method", out var gi) && gi != null) inRange = ParseInRange(Convert.ToString(gi));
+                    if (groupCfg.TryGetValue("missing_above_range_method", out var ga) && ga != null) above = ParseAbove(Convert.ToString(ga));
+                    if (groupCfg.TryGetValue("exhaustive_probability", out var ge) && ge != null) exhaustiveLocal = Convert.ToBoolean(ge);
+                    if (groupCfg.TryGetValue("exhaustive_probability_tolerance", out var gtol) && gtol != null) {
+                        toleranceLocal = Convert.ToDouble(gtol);
+                        if (toleranceLocal < 0) throw new InputValueException($"transition.group.{groupName}.exhaustive_probability_tolerance", "Tolerance must be 0 or greater.");
+                    }
+                }
+
+                var ageMatrix = new Dictionary<ushort, (ISpecies, double)[]>();
+                foreach (var ageKv in table)
+                {
+                    if (!ushort.TryParse(ageKv.Key.Trim(), out ushort ageKey)) throw new InputValueException(ageKv.Key, $"Invalid age key '{ageKv.Key}' in [transition.data.{sourceName}].");
+                    var map = ageKv.Value as IDictionary<string, object>;
+                    if (map == null) throw new InputValueException($"transition.data.{sourceName}.{ageKv.Key}", $"Age row must be an inline table mapping target species to probability.");
+                    var list = new List<(ISpecies, double)>();
+                    double sum = 0.0;
+                    foreach (var targetKv in map)
+                    {
+                        string targetName = targetKv.Key;
+                        if (!double.TryParse(Convert.ToString(targetKv.Value), out double prob)) throw new InputValueException(Convert.ToString(targetKv.Value), $"Invalid probability for target '{targetName}' in [transition.data.{sourceName}.{ageKv.Key}].");
+                        if (prob < 0.0 || prob > 1.0) throw new InputValueException(Convert.ToString(targetKv.Value), $"Probability for target '{targetName}' in [transition.data.{sourceName}.{ageKv.Key}] must be between 0.0 and 1.0.");
+                        ISpecies targetSpecies;
+                        if (string.Equals(targetName, "DEAD", StringComparison.OrdinalIgnoreCase)) targetSpecies = null;
+                        else
+                        {
+                            if (!speciesNameToISpecies.TryGetValue(targetName, out targetSpecies)) throw new InputValueException(targetName, $"Species '{targetName}' in [transition.data.{sourceName}.{ageKv.Key}] does not exist.");
+                            if (!speciesToGroup.TryGetValue(targetSpecies, out string targetGroup) || !string.Equals(targetGroup, groupName, StringComparison.OrdinalIgnoreCase)) throw new InputValueException(targetName, $"Target species '{targetName}' must belong to the same group as source '{sourceName}'.");
+                        }
+                        if (prob > 0.0) list.Add((targetSpecies, prob));
+                        sum += prob;
+                    }
+                    double eps = toleranceLocal;
+                    if (exhaustiveLocal)
+                    {
+                        if (Math.Abs(sum - 1.0) > eps) {
+                            var parts = list.Select(t => (t.Item1 == null ? "DEAD" : t.Item1.Name) + "=" + t.Item2);
+                            throw new InputValueException($"transition.data.{sourceName}.{ageKv.Key}", $"[transition.data.{sourceName}.{ageKv.Key}] sum={sum}, tolerance={eps}, values=[{string.Join(", ", parts)}] Probabilities must sum to exactly 1.0 when exhaustive_probability is true.");
+                        }
+                    }
+                    else
+                    {
+                        if (sum - 1.0 > eps) {
+                            var parts = list.Select(t => (t.Item1 == null ? "DEAD" : t.Item1.Name) + "=" + t.Item2);
+                            throw new InputValueException($"transition.data.{sourceName}.{ageKv.Key}", $"[transition.data.{sourceName}.{ageKv.Key}] sum={sum}, tolerance={eps}, values=[{string.Join(", ", parts)}] Probabilities must sum to 1.0 or less.");
+                        }
+                    }
+                    ageMatrix[ageKey] = list.ToArray();
+                }
+
+                var speciesMatrix = new SpeciesAgeMatrix(sourceSpecies, groupHealthy[groupName], ageMatrix, below, inRange, above, exhaustiveLocal, toleranceLocal);
+                speciesMatrices[sourceSpecies] = speciesMatrix;
+            }
+
+            parameters.SpeciesTransitionAgeMatrix = speciesMatrices;
 
             if (parameters.DistanceDispersalDecayKernelFunction == null) throw new InputValueException("dispersal.kernel", "Failed to construct kernel.");
 
             PlugIn.ModelCore.UI.WriteLine("Configuration summary:");
             PlugIn.ModelCore.UI.WriteLine($"  Timestep: {parameters.Timestep}");
             PlugIn.ModelCore.UI.WriteLine($"  Transmission rate: {parameters.TransmissionRate}");
+            PlugIn.ModelCore.UI.WriteLine($"  Initial infection path: {(parameters.InitialInfectionPath ?? "<none>")}");
             PlugIn.ModelCore.UI.WriteLine($"  Species host index: {speciesHostIndexPath}");
-            PlugIn.ModelCore.UI.WriteLine($"  Species matrix: {speciesMatrixPath}");
             PlugIn.ModelCore.UI.WriteLine($"  Dispersal kernel: {parameters.DistanceDispersalDecayKernel}");
             PlugIn.ModelCore.UI.WriteLine($"  Dispersal maximum distance: {parameters.DispersalMaxDistance}");
             PlugIn.ModelCore.UI.WriteLine($"  SHI mode: {parameters.SHIMode}");
-            switch (parameters.DistanceDispersalDecayKernel)
-            {
+            switch (parameters.DistanceDispersalDecayKernel) {
                 case DistanceDispersalDecayKernel.NegativeExponent:
                 case DistanceDispersalDecayKernel.PowerLaw:
                     PlugIn.ModelCore.UI.WriteLine($"  Kernel: {parameters.DistanceDispersalDecayKernel}");
@@ -180,6 +308,42 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     break;
             }
 
+            PlugIn.ModelCore.UI.WriteLine("Transition configuration:");
+            PlugIn.ModelCore.UI.WriteLine($"  Exhaustive probability: {exhaustiveProbability}");
+            PlugIn.ModelCore.UI.WriteLine($"  Exhaustive probability tolerance: {exhaustiveProbabilityTolerance}");
+            PlugIn.ModelCore.UI.WriteLine("  Groups:");
+            foreach (var g in groupHealthy.Keys) {
+                PlugIn.ModelCore.UI.WriteLine($"    {g}: healthy={groupHealthy[g].Name}, infected=[{string.Join(", ", groupInfected[g])}]");
+            }
+            PlugIn.ModelCore.UI.WriteLine("  Designated healthy species:");
+            foreach (var hs in parameters.DesignatedHealthySpecies) PlugIn.ModelCore.UI.WriteLine($"    {hs.Name}");
+            PlugIn.ModelCore.UI.WriteLine("  Infected species:");
+            foreach (var isx in parameters.InfectedSpeciesLookup) PlugIn.ModelCore.UI.WriteLine($"    {isx.Name}");
+            PlugIn.ModelCore.UI.WriteLine("  Species age transition matrices:");
+            foreach (var kvp in parameters.SpeciesTransitionAgeMatrix) {
+                var sp = kvp.Key;
+                var mat = kvp.Value;
+                PlugIn.ModelCore.UI.WriteLine($"    source={sp.Name}, healthy={mat.DesignatedHealthySpecies().Name}");
+            }
+
+            foreach (var kvp in parameters.SpeciesTransitionAgeMatrix) {
+                var sp = kvp.Key;
+                var mat = kvp.Value;
+                var dict = (Dictionary<ushort, (ISpecies, double)[]>)kvp.Value.GetType().GetField("_ageTransitionMatrix", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(kvp.Value);
+                var ages = new List<ushort>(dict.Keys);
+                ages.Sort();
+                foreach (ushort age in ages) {
+                    var dist = dict[age];
+                    var parts = new List<string>();
+                    foreach (var t in dist)
+                    {
+                        parts.Add($"{(t.Item1 == null ? "DEAD" : t.Item1.Name)}={t.Item2}");
+                    }
+                    PlugIn.ModelCore.UI.WriteLine($"      species: {sp.Name}, age {age}: {string.Join(", ", parts)}");
+                }
+            }
+
+            //Environment.Exit(1);
             return parameters;
         }
 

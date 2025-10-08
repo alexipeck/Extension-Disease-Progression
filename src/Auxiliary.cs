@@ -1,8 +1,12 @@
 
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Dynamic;
 using System.Threading.Tasks;
+using Landis.Library.UniversalCohorts;
+using Landis.SpatialModeling;
 
 namespace Landis.Extension.Disturbance.DiseaseProgression {
     public static class Auxiliary {
@@ -124,6 +128,15 @@ namespace Landis.Extension.Disturbance.DiseaseProgression {
 				j--;
 			}
 			return new string(buf);
+        }
+        public static void DumpSiteInformation(IEnumerable<ActiveSite> sites) {
+            foreach (ActiveSite site in sites) {
+                foreach (ISpeciesCohorts speciesCohorts in SiteVars.Cohorts[site]) {
+                    foreach (ICohort cohort in speciesCohorts) {
+                        Console.WriteLine($"Species: {speciesCohorts.Species.Name}, biomass: {cohort.Data.Biomass}");
+                    }
+                }
+            }
         }
     }
 }
