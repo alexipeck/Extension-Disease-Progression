@@ -858,9 +858,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                         if (cohort.Value.biomass > 0) {
                             ExpandoObject additionalParameters = new ExpandoObject();
                             IDictionary<string, object> additionalParametersDictionary = (IDictionary<string, object>)additionalParameters;
-                            Console.WriteLine($"F biomass: {cohort.Value.biomass}, age: {cohort.Key}, species: {species.Key.Name}");
+                            //Console.WriteLine($"F biomass: {cohort.Value.biomass}, age: {cohort.Key}, species: {species.Key.Name}");
                             foreach (var parameter in cohort.Value.additionalParameters) {
-                                Console.WriteLine($"F Parameter: {parameter.Key}, Value: {parameter.Value}");
+                                //Console.WriteLine($"F Parameter: {parameter.Key}, Value: {parameter.Value}");
                                 additionalParametersDictionary[parameter.Key] = parameter.Value;
                             }
                             newSiteCohorts.AddNewCohort(species.Key, cohort.Key, cohort.Value.biomass, additionalParameters);
