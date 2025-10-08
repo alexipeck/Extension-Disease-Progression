@@ -4,6 +4,7 @@ using System.IO;
 using Landis.Core;
 using Landis.Utilities;
 using Tomlyn;
+using System.Linq;
 
 namespace Landis.Extension.Disturbance.DiseaseProgression
 {
@@ -133,6 +134,11 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             bool exhaustiveProbability = false;
             if (!validationDefaultsTable.TryGetValue("exhaustive_probability", out var exhaustiveObj) || exhaustiveObj == null) throw new InputValueException("transition.validation.default.exhaustive_probability", "Missing required key 'exhaustive_probability'.");
             exhaustiveProbability = Convert.ToBoolean(exhaustiveObj);
+            double exhaustiveProbabilityTolerance = 1e-9;
+            if (validationDefaultsTable.TryGetValue("exhaustive_probability_tolerance", out var epsObj) && epsObj != null) {
+                exhaustiveProbabilityTolerance = Convert.ToDouble(epsObj);
+                if (exhaustiveProbabilityTolerance < 0) throw new InputValueException("transition.validation.default.exhaustive_probability_tolerance", "Tolerance must be 0 or greater.");
+            }
 
             string defaultBelow = Convert.ToString(validationDefaultsTable.ContainsKey("missing_below_range_method") ? validationDefaultsTable["missing_below_range_method"] : "error");
             string defaultInRange = Convert.ToString(validationDefaultsTable.ContainsKey("missing_in_range_method") ? validationDefaultsTable["missing_in_range_method"] : "error");
@@ -218,11 +224,18 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 MissingBelowRangeMethod below = defaultBelowEnum;
                 MissingInRangeMethod inRange = defaultInRangeEnum;
                 MissingAboveRangeMethod above = defaultAboveEnum;
+                bool exhaustiveLocal = exhaustiveProbability;
+                double toleranceLocal = exhaustiveProbabilityTolerance;
                 if (groupTable[groupName] is IDictionary<string, object> groupCfg)
                 {
                     if (groupCfg.TryGetValue("missing_below_range_method", out var gb) && gb != null) below = ParseBelow(Convert.ToString(gb));
                     if (groupCfg.TryGetValue("missing_in_range_method", out var gi) && gi != null) inRange = ParseInRange(Convert.ToString(gi));
                     if (groupCfg.TryGetValue("missing_above_range_method", out var ga) && ga != null) above = ParseAbove(Convert.ToString(ga));
+                    if (groupCfg.TryGetValue("exhaustive_probability", out var ge) && ge != null) exhaustiveLocal = Convert.ToBoolean(ge);
+                    if (groupCfg.TryGetValue("exhaustive_probability_tolerance", out var gtol) && gtol != null) {
+                        toleranceLocal = Convert.ToDouble(gtol);
+                        if (toleranceLocal < 0) throw new InputValueException($"transition.group.{groupName}.exhaustive_probability_tolerance", "Tolerance must be 0 or greater.");
+                    }
                 }
 
                 var ageMatrix = new Dictionary<ushort, (ISpecies, double)[]>();
@@ -248,19 +261,25 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                         if (prob > 0.0) list.Add((targetSpecies, prob));
                         sum += prob;
                     }
-                    double eps = 1e-9;
-                    if (exhaustiveProbability)
+                    double eps = toleranceLocal;
+                    if (exhaustiveLocal)
                     {
-                        if (Math.Abs(sum - 1.0) > eps) throw new InputValueException($"transition.data.{sourceName}.{ageKv.Key}", $"Probabilities must sum to exactly 1.0 when exhaustive_probability is true.");
+                        if (Math.Abs(sum - 1.0) > eps) {
+                            var parts = list.Select(t => (t.Item1 == null ? "DEAD" : t.Item1.Name) + "=" + t.Item2);
+                            throw new InputValueException($"transition.data.{sourceName}.{ageKv.Key}", $"[transition.data.{sourceName}.{ageKv.Key}] sum={sum}, tolerance={eps}, values=[{string.Join(", ", parts)}] Probabilities must sum to exactly 1.0 when exhaustive_probability is true.");
+                        }
                     }
                     else
                     {
-                        if (sum - 1.0 > eps) throw new InputValueException($"transition.data.{sourceName}.{ageKv.Key}", $"Probabilities must sum to 1.0 or less.");
+                        if (sum - 1.0 > eps) {
+                            var parts = list.Select(t => (t.Item1 == null ? "DEAD" : t.Item1.Name) + "=" + t.Item2);
+                            throw new InputValueException($"transition.data.{sourceName}.{ageKv.Key}", $"[transition.data.{sourceName}.{ageKv.Key}] sum={sum}, tolerance={eps}, values=[{string.Join(", ", parts)}] Probabilities must sum to 1.0 or less.");
+                        }
                     }
                     ageMatrix[ageKey] = list.ToArray();
                 }
 
-                var speciesMatrix = new SpeciesAgeMatrix(sourceSpecies, groupHealthy[groupName], ageMatrix, below, inRange, above);
+                var speciesMatrix = new SpeciesAgeMatrix(sourceSpecies, groupHealthy[groupName], ageMatrix, below, inRange, above, exhaustiveLocal, toleranceLocal);
                 speciesMatrices[sourceSpecies] = speciesMatrix;
             }
 
@@ -291,6 +310,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
 
             PlugIn.ModelCore.UI.WriteLine("Transition configuration:");
             PlugIn.ModelCore.UI.WriteLine($"  Exhaustive probability: {exhaustiveProbability}");
+            PlugIn.ModelCore.UI.WriteLine($"  Exhaustive probability tolerance: {exhaustiveProbabilityTolerance}");
             PlugIn.ModelCore.UI.WriteLine("  Groups:");
             foreach (var g in groupHealthy.Keys) {
                 PlugIn.ModelCore.UI.WriteLine($"    {g}: healthy={groupHealthy[g].Name}, infected=[{string.Join(", ", groupInfected[g])}]");

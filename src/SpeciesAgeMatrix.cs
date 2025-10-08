@@ -24,13 +24,17 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         private readonly MissingBelowRangeMethod _missingBelowRangeMethod;
         private readonly MissingInRangeMethod _missingInRangeMethod;
         private readonly MissingAboveRangeMethod _missingAboveRangeMethod;
+        private readonly bool _exhaustiveProbability;
+        private readonly double _exhaustiveProbabilityTolerance;
 
         public SpeciesAgeMatrix(ISpecies species,
         ISpecies designatedHealthySpecies,
         Dictionary<ushort, (ISpecies, double)[]> ageTransitionMatrix,
         MissingBelowRangeMethod missingBelowRangeMethod,
         MissingInRangeMethod missingInRangeMethod,
-        MissingAboveRangeMethod missingAboveRangeMethod) {
+        MissingAboveRangeMethod missingAboveRangeMethod,
+        bool exhaustiveProbability,
+        double exhaustiveProbabilityTolerance) {
             ushort youngestAge = ageTransitionMatrix.Keys.ToArray().Min();
             ushort oldestAge = ageTransitionMatrix.Keys.ToArray().Max();
             ////////validation
@@ -152,6 +156,18 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             _missingBelowRangeMethod = missingBelowRangeMethod;
             _missingInRangeMethod = missingInRangeMethod;
             _missingAboveRangeMethod = missingAboveRangeMethod;
+            _exhaustiveProbability = exhaustiveProbability;
+            _exhaustiveProbabilityTolerance = exhaustiveProbabilityTolerance;
+            if (_exhaustiveProbability) {
+                Console.WriteLine($"Validating exhaustive probability for species {species.Name}");
+                foreach (var kvp in _ageTransitionMatrix) {
+                    var arr = kvp.Value;
+                    double sum = 0.0;
+                    for (int i = 0; i < arr.Length; i++) sum += arr[i].Item2;
+					double eps = _exhaustiveProbabilityTolerance;
+					if (Math.Abs(sum - 1.0) > eps) throw new InputValueException($"transition.data.{species.Name}.{kvp.Key}", $"[transition.data.{species.Name}.{kvp.Key}] sum={sum}, tolerance={eps}, values=[{string.Join(", ", arr.Select(t => $"{(t.Item1 == null ? "DEAD" : t.Item1.Name)}={t.Item2}"))}] Probabilities must sum to exactly 1.0 after interpolation.");
+                }
+            }
         }
 
         public ISpecies DesignatedHealthySpecies() {
