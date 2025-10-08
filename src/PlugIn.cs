@@ -241,6 +241,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
 
             stopwatch.Start();
             foreach (int healthySiteIndex in healthySitesListIndices) {
+                if (FOI[healthySiteIndex] == 0.0) continue;
                 double random = rand.NextDouble();
                 if (random <= FOI[healthySiteIndex]) {
                     sitesForProportioning[healthySiteIndex] = true;
