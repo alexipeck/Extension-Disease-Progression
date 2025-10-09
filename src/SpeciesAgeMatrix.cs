@@ -11,6 +11,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
     public enum MissingBelowRangeMethod {Error,Ignore}
     public enum MissingInRangeMethod {Error,AgeThreshold,LinearInterpolation}
     public enum MissingAboveRangeMethod {Error,UseOldest,KillAll,Ignore}
+    public enum DataProvider {ReferToGroup,Preprocessed,Softmax}
     public readonly struct SpeciesAgeMatrix
     {
         //private readonly int startOfAgeRange;

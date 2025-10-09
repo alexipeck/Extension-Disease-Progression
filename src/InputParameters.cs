@@ -45,6 +45,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         DistanceDispersalDecayKernel DistanceDispersalDecayKernel { get; set; }
         int DispersalMaxDistance { get; set; }
         IDistanceDispersalDecayKernel DistanceDispersalDecayKernelFunction { get; }
+        Dictionary<ISpecies, Dictionary<ushort, Dictionary<ISpecies, SoftmaxInputs>>> SpeciesSoftmaxInputs { get; set; }
     }
     public class InputParameters
         : IInputParameters
@@ -60,6 +61,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         private int dispersalMaxDistance;
         private IDistanceDispersalDecayKernel distanceDispersalDecayKernelFunction;
         private SHIMode shiMode;
+        private Dictionary<ISpecies, Dictionary<ushort, Dictionary<ISpecies, SoftmaxInputs>>> speciesSoftmaxParameters;
         public Dictionary<ISpecies, SpeciesAgeMatrix> SpeciesTransitionAgeMatrix
         {
             get {
@@ -109,6 +111,16 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         public IDistanceDispersalDecayKernel DistanceDispersalDecayKernelFunction
         {
             get { return distanceDispersalDecayKernelFunction; }
+        }
+
+        public Dictionary<ISpecies, Dictionary<ushort, Dictionary<ISpecies, SoftmaxInputs>>> SpeciesSoftmaxInputs
+        {
+            get {
+                return speciesSoftmaxParameters;
+            }
+            set {
+                speciesSoftmaxParameters = value;
+            }
         }
 
         public ISpecies[] DesignatedHealthySpecies
@@ -170,5 +182,17 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             set { shiMode = value; }
         }
         
+    }
+    public readonly struct SoftmaxInputs {
+        public double B0 { get; }
+        public double B1 { get; }
+        public double DBH { get; }
+        public double B2 { get; }
+        public SoftmaxInputs(double b0, double b1, double dbh, double b2) {
+            B0 = b0;
+            B1 = b1;
+            DBH = dbh;
+            B2 = b2;
+        }
     }
 }

@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Dynamic;
 using System.Threading.Tasks;
+using Landis.Core;
 using Landis.Library.UniversalCohorts;
 using Landis.SpatialModeling;
 
@@ -137,6 +138,61 @@ namespace Landis.Extension.Disturbance.DiseaseProgression {
                     }
                 }
             }
+        }
+
+        public static void PrecalculateSpeciesDistributionTransitions() {
+            //maybe take input as (ISpecies, ISpecies[])[] speciesGroups to denote the healthy species and the progressions
+            //need to take input of the max age for each species/pseudo-species group
+            /* species groups {
+
+            }
+            species {
+                age {
+                    species it can transition to {
+                        storage[species][age][transition_list]
+                    }
+                }
+            } */
+            
+            //process all coefficients into exponentialLinearPredictors
+
+        }
+        //assumes disease progression only (regression not implemented)
+        public static (ISpecies, double)[] T(ISpecies startingSpecies, (ISpecies, double)[] coefficients) {
+            //not sure how to input yet
+            //dbh at the start of the timestep (likely something to do with age and biomass?)
+            double dbh_cm = 20.0;
+            //hardcoded
+            double timestep = 1.0;
+            (ISpecies, double)[] exponentialLinearPredictors = new (ISpecies, double)[coefficients.Length];
+            int count = 0;
+            {
+                bool counterStarted = false;
+                for (int i = 0; i < coefficients.Length; i++) {
+                    if (coefficients[i].Item1 == startingSpecies) counterStarted = true;
+                    if (counterStarted) count++;
+                    exponentialLinearPredictors[i] = (coefficients[i].Item1, Math.Exp(coefficients[i].Item2));
+                }
+            }
+            (ISpecies, double)[] outputTransitions = new (ISpecies, double)[count];
+            double healthyExponentialLinearPredictor = double.NegativeInfinity;
+            int index = 0;
+            foreach ((ISpecies species, double value) linearPredictor in exponentialLinearPredictors) {
+                double sumOfOtherLinearPredictors = 0.0;
+                foreach ((ISpecies species, double value) exponentialLinearPredictor in exponentialLinearPredictors) {
+                    if (exponentialLinearPredictor.species == startingSpecies) {
+                        healthyExponentialLinearPredictor = exponentialLinearPredictor.value;
+                        continue;
+                    }
+                    sumOfOtherLinearPredictors += exponentialLinearPredictor.value;
+                }
+                
+                //outputTransitions[index] = 
+                index++;
+            }
+            Trace.Assert(healthyExponentialLinearPredictor != double.NegativeInfinity, "Healthy exponential linear predictor not found");
+            //1 is actualle e^0
+            return outputTransitions;
         }
     }
 }
