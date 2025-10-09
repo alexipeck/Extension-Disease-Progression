@@ -130,6 +130,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             if (transitionTable == null) throw new InputValueException("transition", "Missing required [transition] section.");
             var validationDefaultsTable = GetNestedValue(transitionTable, new[] { "validation", "default" }, required: true) as IDictionary<string, object>;
             if (validationDefaultsTable == null) throw new InputValueException("transition.validation.default", "Missing required [transition.validation.default] section.");
+            var transitionDefaultsTable = GetNestedValue(transitionTable, new[] { "default" }, required: false) as IDictionary<string, object>;
 
             bool exhaustiveProbability = false;
             if (!validationDefaultsTable.TryGetValue("exhaustive_probability", out var exhaustiveObj) || exhaustiveObj == null) throw new InputValueException("transition.validation.default.exhaustive_probability", "Missing required key 'exhaustive_probability'.");
@@ -143,7 +144,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             string defaultBelow = Convert.ToString(validationDefaultsTable.ContainsKey("missing_below_range_method") ? validationDefaultsTable["missing_below_range_method"] : "error");
             string defaultInRange = Convert.ToString(validationDefaultsTable.ContainsKey("missing_in_range_method") ? validationDefaultsTable["missing_in_range_method"] : "error");
             string defaultAbove = Convert.ToString(validationDefaultsTable.ContainsKey("missing_above_range_method") ? validationDefaultsTable["missing_above_range_method"] : "error");
-            string defaultDataProvider = Convert.ToString(validationDefaultsTable.ContainsKey("data_provider") ? validationDefaultsTable["data_provider"] : "refer_to_group");
+            string defaultDataProvider = Convert.ToString(transitionDefaultsTable != null && transitionDefaultsTable.ContainsKey("data_provider") ? transitionDefaultsTable["data_provider"] : "refer_to_group");
 
             MissingBelowRangeMethod ParseBelow(string s) {
                 if (string.Equals(s, "ignore", StringComparison.OrdinalIgnoreCase)) return MissingBelowRangeMethod.Ignore;
@@ -167,7 +168,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 if (string.Equals(s, "preprocessed", StringComparison.OrdinalIgnoreCase)) return DataProvider.Preprocessed;
                 if (string.Equals(s, "softmax", StringComparison.OrdinalIgnoreCase)) return DataProvider.Softmax;
                 if (string.Equals(s, "refer_to_group", StringComparison.OrdinalIgnoreCase)) return DataProvider.ReferToGroup;
-                throw new InputValueException("transition.validation.default.data_provider", "Valid values: preprocessed, softmax, refer_to_group");
+                throw new InputValueException("transition.default.data_provider", "Valid values: preprocessed, softmax, refer_to_group");
             }
 
             var groupTable = GetNestedValue(transitionTable, new[] { "group" }, required: true) as IDictionary<string, object>;
@@ -211,7 +212,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     }
                 } else {
                     if (defaultDataProviderEnum == DataProvider.ReferToGroup) {
-                        throw new InputValueException($"transition.group.{groupName}.data_provider", "Missing required key 'data_provider' because validation default data_provider is 'refer_to_group'.");
+                        throw new InputValueException($"transition.group.{groupName}.data_provider", "Missing required key 'data_provider' because transition.default.data_provider is 'refer_to_group'.");
                     }
                     groupProvider = defaultDataProviderEnum;
                 }
@@ -227,19 +228,18 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             parameters.DesignatedHealthySpecies = new List<ISpecies>(groupHealthy.Values).ToArray();
 
             var speciesMatrices = new Dictionary<ISpecies, SpeciesAgeMatrix>();
-            var softmaxParameters = new Dictionary<ISpecies, Dictionary<ushort, Dictionary<ISpecies, SoftmaxInputs>>>();
+            var softmaxParameters = new Dictionary<ISpecies, Dictionary<ushort, List<(ISpecies, SoftmaxInputs)>>>();
 
             MissingBelowRangeMethod defaultBelowEnum = ParseBelow(defaultBelow);
             MissingInRangeMethod defaultInRangeEnum = ParseInRange(defaultInRange);
             MissingAboveRangeMethod defaultAboveEnum = ParseAbove(defaultAbove);
 
             if (preprocessedTable != null) {
-                foreach (var kv in preprocessedTable)
-                {
+                foreach (var kv in preprocessedTable) {
                     string sourceName = kv.Key;
                     if (!speciesNameToISpecies.TryGetValue(sourceName, out ISpecies sourceSpecies)) throw new InputValueException(sourceName, $"Species '{sourceName}' in [transition.preprocessed.{sourceName}] does not exist.");
                     if (!speciesToGroup.TryGetValue(sourceSpecies, out string groupName)) throw new InputValueException(sourceName, $"Species '{sourceName}' in [transition.preprocessed.{sourceName}] is not assigned to any group.");
-                    if (!groupDataProvider.TryGetValue(groupName, out DataProvider gp) || gp != DataProvider.Preprocessed) throw new InputValueException($"transition.preprocessed.{sourceName}", $"Species '{sourceName}' belongs to group '{groupName}' which is configured for 'softmax', but data was provided in [transition.preprocessed].");
+                    if (!groupDataProvider.TryGetValue(groupName, out DataProvider gp) || gp != DataProvider.Preprocessed) continue;
                     var table = kv.Value as IDictionary<string, object>;
                     if (table == null) throw new InputValueException($"transition.preprocessed.{sourceName}", $"[transition.preprocessed.{sourceName}] must be a table.");
 
@@ -266,8 +266,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                         if (map == null) throw new InputValueException($"transition.preprocessed.{sourceName}.{ageKv.Key}", $"Age row must be an inline table mapping target species to probability.");
                         var list = new List<(ISpecies, double)>();
                         double sum = 0.0;
-                        foreach (var targetKv in map)
-                        {
+                        foreach (var targetKv in map) {
                             string targetName = targetKv.Key;
                             if (!double.TryParse(Convert.ToString(targetKv.Value), out double prob)) throw new InputValueException(Convert.ToString(targetKv.Value), $"Invalid probability for target '{targetName}' in [transition.preprocessed.{sourceName}.{ageKv.Key}].");
                             if (prob < 0.0 || prob > 1.0) throw new InputValueException(Convert.ToString(targetKv.Value), $"Probability for target '{targetName}' in [transition.preprocessed.{sourceName}.{ageKv.Key}] must be between 0.0 and 1.0.");
@@ -282,15 +281,12 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                             sum += prob;
                         }
                         double eps = toleranceLocal;
-                        if (exhaustiveLocal)
-                        {
+                        if (exhaustiveLocal) {
                             if (Math.Abs(sum - 1.0) > eps) {
                                 var parts = list.Select(t => (t.Item1 == null ? "DEAD" : t.Item1.Name) + "=" + t.Item2);
                                 throw new InputValueException($"transition.preprocessed.{sourceName}.{ageKv.Key}", $"[transition.preprocessed.{sourceName}.{ageKv.Key}] sum={sum}, tolerance={eps}, values=[{string.Join(", ", parts)}] Probabilities must sum to exactly 1.0 when exhaustive_probability is true.");
                             }
-                        }
-                        else
-                        {
+                        } else {
                             if (sum - 1.0 > eps) {
                                 var parts = list.Select(t => (t.Item1 == null ? "DEAD" : t.Item1.Name) + "=" + t.Item2);
                                 throw new InputValueException($"transition.preprocessed.{sourceName}.{ageKv.Key}", $"[transition.preprocessed.{sourceName}.{ageKv.Key}] sum={sum}, tolerance={eps}, values=[{string.Join(", ", parts)}] Probabilities must sum to 1.0 or less.");
@@ -305,41 +301,63 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
 
             if (softmaxTable != null) {
-                foreach (var kv in softmaxTable)
-                {
+                foreach (var kv in softmaxTable) {
                     string sourceName = kv.Key;
                     if (!speciesNameToISpecies.TryGetValue(sourceName, out ISpecies sourceSpecies)) throw new InputValueException(sourceName, $"Species '{sourceName}' in [transition.softmax.{sourceName}] does not exist.");
                     if (!speciesToGroup.TryGetValue(sourceSpecies, out string groupName)) throw new InputValueException(sourceName, $"Species '{sourceName}' in [transition.softmax.{sourceName}] is not assigned to any group.");
-                    if (!groupDataProvider.TryGetValue(groupName, out DataProvider gp) || gp != DataProvider.Softmax) throw new InputValueException($"transition.softmax.{sourceName}", $"Species '{sourceName}' belongs to group '{groupName}' which is configured for 'preprocessed', but data was provided in [transition.softmax].");
+                    if (!groupDataProvider.TryGetValue(groupName, out DataProvider gp) || gp != DataProvider.Softmax) continue;
                     var table = kv.Value as IDictionary<string, object>;
                     if (table == null) throw new InputValueException($"transition.softmax.{sourceName}", $"[transition.softmax.{sourceName}] must be a table.");
 
-                    if (!softmaxParameters.ContainsKey(sourceSpecies)) softmaxParameters[sourceSpecies] = new Dictionary<ushort, Dictionary<ISpecies, SoftmaxInputs>>();
+                    if (!softmaxParameters.ContainsKey(sourceSpecies)) softmaxParameters[sourceSpecies] = new Dictionary<ushort, List<(ISpecies, SoftmaxInputs)>>();
                     foreach (var entry in table) {
                         string key = entry.Key.Trim();
                         int dot = key.IndexOf('.');
-                        if (dot <= 0 || dot == key.Length - 1) throw new InputValueException(key, $"Invalid key '{key}' in [transition.softmax.{sourceName}]; expected 'AGE.TARGET_SPECIES'.");
-                        string ageStr = key.Substring(0, dot).Trim();
-                        string targetName = key.Substring(dot + 1).Trim();
-                        if (!ushort.TryParse(ageStr, out ushort age)) throw new InputValueException(ageStr, $"Invalid age '{ageStr}' in [transition.softmax.{sourceName}].");
-                        var coeffsMap = entry.Value as IDictionary<string, object>;
-                        if (coeffsMap == null) throw new InputValueException($"transition.softmax.{sourceName}.{key}", $"Entry must be an inline table with keys b0, b1, dbh, b2.");
-                        if (!coeffsMap.TryGetValue("b0", out var b0Obj) || !coeffsMap.TryGetValue("b1", out var b1Obj) || !coeffsMap.TryGetValue("dbh", out var dbhObj) || !coeffsMap.TryGetValue("b2", out var b2Obj))
-                            throw new InputValueException($"transition.softmax.{sourceName}.{key}", $"Missing required coefficients; expected b0, b1, dbh, b2.");
-                        double b0 = Convert.ToDouble(b0Obj);
-                        double b1 = Convert.ToDouble(b1Obj);
-                        double dbh = Convert.ToDouble(dbhObj);
-                        double b2 = Convert.ToDouble(b2Obj);
+                        if (dot > 0 && dot < key.Length - 1) {
+                            string ageStr = key.Substring(0, dot).Trim();
+                            string targetName = key.Substring(dot + 1).Trim();
+                            if (!ushort.TryParse(ageStr, out ushort age)) throw new InputValueException(ageStr, $"Invalid age '{ageStr}' in [transition.softmax.{sourceName}].");
+                            var coeffsMap = entry.Value as IDictionary<string, object>;
+                            if (coeffsMap == null) throw new InputValueException($"transition.softmax.{sourceName}.{key}", $"Entry must be an inline table with keys b0, b1, dbh, b2.");
+                            if (!coeffsMap.TryGetValue("b0", out var b0Obj) || !coeffsMap.TryGetValue("b1", out var b1Obj) || !coeffsMap.TryGetValue("dbh", out var dbhObj) || !coeffsMap.TryGetValue("b2", out var b2Obj))
+                                throw new InputValueException($"transition.softmax.{sourceName}.{key}", $"Missing required coefficients; expected b0, b1, dbh, b2.");
+                            double b0 = Convert.ToDouble(b0Obj);
+                            double b1 = Convert.ToDouble(b1Obj);
+                            double dbh = Convert.ToDouble(dbhObj);
+                            double b2 = Convert.ToDouble(b2Obj);
 
-                        ISpecies targetSpecies;
-                        if (string.Equals(targetName, "DEAD", StringComparison.OrdinalIgnoreCase)) targetSpecies = null;
-                        else {
-                            if (!speciesNameToISpecies.TryGetValue(targetName, out targetSpecies)) throw new InputValueException(targetName, $"Species '{targetName}' in [transition.softmax.{sourceName}.{key}] does not exist.");
-                            if (!speciesToGroup.TryGetValue(targetSpecies, out string targetGroup) || !string.Equals(targetGroup, groupName, StringComparison.OrdinalIgnoreCase)) throw new InputValueException(targetName, $"Target species '{targetName}' must belong to the same group as source '{sourceName}'.");
+                            ISpecies targetSpecies = null;
+                            if (!string.Equals(targetName, "DEAD", StringComparison.OrdinalIgnoreCase)) {
+                                if (!speciesNameToISpecies.TryGetValue(targetName, out targetSpecies)) throw new InputValueException(targetName, $"Species '{targetName}' in [transition.softmax.{sourceName}.{key}] does not exist.");
+                                if (!speciesToGroup.TryGetValue(targetSpecies, out string targetGroup) || !string.Equals(targetGroup, groupName, StringComparison.OrdinalIgnoreCase)) throw new InputValueException(targetName, $"Target species '{targetName}' must belong to the same group as source '{sourceName}'.");
+                            }
+                            if (!softmaxParameters[sourceSpecies].ContainsKey(age)) softmaxParameters[sourceSpecies][age] = new List<(ISpecies, SoftmaxInputs)>();
+                            softmaxParameters[sourceSpecies][age].Add((targetSpecies, new SoftmaxInputs(b0, b1, dbh, b2)));
+                        } else {
+                            string ageStr = key;
+                            if (!ushort.TryParse(ageStr, out ushort age)) throw new InputValueException(ageStr, $"Invalid age '{ageStr}' in [transition.softmax.{sourceName}].");
+                            var targetsMap = entry.Value as IDictionary<string, object>;
+                            if (targetsMap == null) throw new InputValueException($"transition.softmax.{sourceName}.{ageStr}", $"Entry must contain target species mapping to coefficients.");
+                            foreach (var tkv in targetsMap) {
+                                string targetName = tkv.Key.Trim();
+                                var coeffsMap = tkv.Value as IDictionary<string, object>;
+                                if (coeffsMap == null) throw new InputValueException($"transition.softmax.{sourceName}.{ageStr}.{targetName}", $"Entry must be an inline table with keys b0, b1, dbh, b2.");
+                                if (!coeffsMap.TryGetValue("b0", out var b0Obj) || !coeffsMap.TryGetValue("b1", out var b1Obj) || !coeffsMap.TryGetValue("dbh", out var dbhObj) || !coeffsMap.TryGetValue("b2", out var b2Obj))
+                                    throw new InputValueException($"transition.softmax.{sourceName}.{ageStr}.{targetName}", $"Missing required coefficients; expected b0, b1, dbh, b2.");
+                                double b0 = Convert.ToDouble(b0Obj);
+                                double b1 = Convert.ToDouble(b1Obj);
+                                double dbh = Convert.ToDouble(dbhObj);
+                                double b2 = Convert.ToDouble(b2Obj);
+
+                            ISpecies targetSpecies = null;
+                            if (!string.Equals(targetName, "DEAD", StringComparison.OrdinalIgnoreCase)) {
+                                if (!speciesNameToISpecies.TryGetValue(targetName, out targetSpecies)) throw new InputValueException(targetName, $"Species '{targetName}' in [transition.softmax.{sourceName}.{ageStr}.{targetName}] does not exist.");
+                                if (!speciesToGroup.TryGetValue(targetSpecies, out string targetGroup) || !string.Equals(targetGroup, groupName, StringComparison.OrdinalIgnoreCase)) throw new InputValueException(targetName, $"Target species '{targetName}' must belong to the same group as source '{sourceName}'.");
+                            }
+                            if (!softmaxParameters[sourceSpecies].ContainsKey(age)) softmaxParameters[sourceSpecies][age] = new List<(ISpecies, SoftmaxInputs)>();
+                            softmaxParameters[sourceSpecies][age].Add((targetSpecies, new SoftmaxInputs(b0, b1, dbh, b2)));
+                            }
                         }
-
-                        if (!softmaxParameters[sourceSpecies].ContainsKey(age)) softmaxParameters[sourceSpecies][age] = new Dictionary<ISpecies, SoftmaxInputs>();
-                        softmaxParameters[sourceSpecies][age][targetSpecies] = new SoftmaxInputs(b0, b1, dbh, b2);
                     }
                 }
             }
@@ -404,6 +422,22 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     PlugIn.ModelCore.UI.WriteLine($"      species: {sp.Name}, age {age}: {string.Join(", ", parts)}");
                 }
             }
+
+            PlugIn.ModelCore.UI.WriteLine("  Softmax inputs:");
+            foreach (var srcEntry in parameters.SpeciesSoftmaxInputs) {
+				var sp = srcEntry.Key;
+				var ageMap = srcEntry.Value;
+				var ages = new List<ushort>(ageMap.Keys);
+				ages.Sort();
+				foreach (ushort age in ages) {
+					var targetMap = ageMap[age];
+                    foreach (var kv in targetMap) {
+                        var targetSpecies = kv.Item1;
+                        var coeff = kv.Item2;
+                        PlugIn.ModelCore.UI.WriteLine($"    source={sp.Name}, age {age}, target={(targetSpecies == null ? "DEAD" : targetSpecies.Name)}: b0={coeff.B0}, b1={coeff.B1}, dbh={coeff.DBH}, b2={coeff.B2}");
+                    }
+				}
+			}
 
             //Environment.Exit(1);
             return parameters;
