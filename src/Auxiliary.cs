@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Dynamic;
 using System.Threading.Tasks;
+using Landis.Core;
 using Landis.Library.UniversalCohorts;
 using Landis.SpatialModeling;
 
@@ -137,6 +138,127 @@ namespace Landis.Extension.Disturbance.DiseaseProgression {
                     }
                 }
             }
+        }
+        //does not currently take into account the timestep
+        public static Dictionary<ISpecies, Dictionary<ushort, (ISpecies, double)[]>> PrecalculateSpeciesDistributionTransitions(Dictionary<ISpecies, Dictionary<ushort, List<(ISpecies, SoftmaxInputs)>>> speciesSoftmaxParameters) {
+            Dictionary<ISpecies, Dictionary<ushort, (ISpecies, double)[]>> exponentialLinearPredictors = new Dictionary<ISpecies, Dictionary<ushort, (ISpecies, double)[]>>();
+            foreach (var speciesEntry in speciesSoftmaxParameters) {
+				ISpecies species = speciesEntry.Key;
+				Dictionary<ushort, List<(ISpecies, SoftmaxInputs)>> ageMap = speciesEntry.Value;
+				List<ushort> ages = new List<ushort>(ageMap.Keys);
+				ages.Sort(); //not necessary
+				foreach (ushort age in ages) {
+					List<(ISpecies, SoftmaxInputs)> targetMap = ageMap[age];
+                    if (!exponentialLinearPredictors.ContainsKey(species)) exponentialLinearPredictors[species] = new Dictionary<ushort, (ISpecies, double)[]>();
+                    if (!exponentialLinearPredictors[species].ContainsKey(age)) exponentialLinearPredictors[species][age] = new (ISpecies, double)[targetMap.Count];
+                    exponentialLinearPredictors[species][age] = new (ISpecies, double)[targetMap.Count];
+                    for (int i = 0; i < targetMap.Count; i++) {
+                        (ISpecies, SoftmaxInputs) target = targetMap[i];
+                        SoftmaxInputs softmaxInputs = target.Item2;
+                        exponentialLinearPredictors[species][age][i] = (target.Item1, Math.Exp(softmaxInputs.B0 + (softmaxInputs.B1 * softmaxInputs.DBH) + softmaxInputs.B2));
+                    }
+				}
+			}
+            Dictionary<ISpecies, Dictionary<ushort, List<(ISpecies, double)>>> transitions = new Dictionary<ISpecies, Dictionary<ushort, List<(ISpecies, double)>>>();
+            foreach (var speciesEntry in exponentialLinearPredictors) {
+                ISpecies species = speciesEntry.Key;
+                foreach (var ageEntry in speciesEntry.Value) {
+                    ushort age = ageEntry.Key;
+                    var localExponentialLinearPredictors = ageEntry.Value;
+                    foreach (var predictor in localExponentialLinearPredictors) {
+                        //List<(ISpecies, double)> ageEntryMinusSelf = new List<(ISpecies, double)>();
+                        double sumOfOtherLinearPredictors = 0.0;
+                        foreach (var transition in localExponentialLinearPredictors) {
+                            if (transition.Item1 != predictor.Item1) {
+                                sumOfOtherLinearPredictors += transition.Item2;
+                                //ageEntryMinusSelf.Add(transition);
+                            }
+                        }
+                        double value = predictor.Item2 / (1 + sumOfOtherLinearPredictors);
+                        if (!transitions.ContainsKey(species)) transitions[species] = new Dictionary<ushort, List<(ISpecies, double)>>();
+                        if (!transitions[species].ContainsKey(age)) transitions[species][age] = new List<(ISpecies, double)>();
+                        transitions[species][age].Add((predictor.Item1, value));
+                        //ISpecies targetSpecies = predictor.Item1;
+                        //double value = predictor.Item2;
+                        //Console.WriteLine($"Species: {species.Name}, Age: {age}, Target Species: {targetSpecies.Name}, Value: {value}");
+                    }
+                }
+            }
+            Dictionary<ISpecies, Dictionary<ushort, (ISpecies, double)[]>> transitionsArray = new Dictionary<ISpecies, Dictionary<ushort, (ISpecies, double)[]>>();
+            foreach (var speciesEntry in transitions) {
+                ISpecies species = speciesEntry.Key;
+                transitionsArray[species] = new Dictionary<ushort, (ISpecies, double)[]>();
+                foreach (var ageEntry in speciesEntry.Value) {
+                    ushort age = ageEntry.Key;
+                    List<(ISpecies, double)> transitionList = ageEntry.Value;
+                    transitionsArray[species][age] = transitionList.ToArray();
+                }
+            }
+            foreach (var speciesEntry in transitionsArray) {
+                ISpecies sourceSpecies = speciesEntry.Key;
+                foreach (var ageEntry in speciesEntry.Value) {
+                    ushort age = ageEntry.Key;
+                    (ISpecies, double)[] transitionArray = ageEntry.Value;
+                    foreach (var transition in transitionArray) {
+                        ISpecies targetSpecies = transition.Item1;
+                        double value = transition.Item2;
+                        Console.WriteLine($"Source Species: {(sourceSpecies == null ? "DEAD" : sourceSpecies.Name)}, Age: {age}, Target Species: {(targetSpecies == null ? "DEAD" : targetSpecies.Name)}, Value: {value}");
+                    }
+                }
+            }
+            //maybe take input as (ISpecies, ISpecies[])[] speciesGroups to denote the healthy species and the progressions
+            //need to take input of the max age for each species/pseudo-species group
+            /* species groups {
+
+            }
+            species {
+                age {
+                    species it can transition to {
+                        storage[species][age][transition_list]
+                    }
+                }
+            } */
+            
+            //process all coefficients into exponentialLinearPredictors
+
+            return transitionsArray;
+        }
+        //assumes disease progression only (regression not implemented)
+        public static (ISpecies, double)[] T(ISpecies startingSpecies, (ISpecies, double)[] coefficients) {
+            //not sure how to input yet
+            //dbh at the start of the timestep (likely something to do with age and biomass?)
+            double dbh_cm = 20.0;
+            //hardcoded
+            double timestep = 1.0;
+            (ISpecies, double)[] exponentialLinearPredictors = new (ISpecies, double)[coefficients.Length];
+            int count = 0;
+            {
+                bool counterStarted = false;
+                for (int i = 0; i < coefficients.Length; i++) {
+                    if (coefficients[i].Item1 == startingSpecies) counterStarted = true;
+                    if (counterStarted) count++;
+                    exponentialLinearPredictors[i] = (coefficients[i].Item1, Math.Exp(coefficients[i].Item2));
+                }
+            }
+            (ISpecies, double)[] outputTransitions = new (ISpecies, double)[count];
+            double healthyExponentialLinearPredictor = double.NegativeInfinity;
+            int index = 0;
+            foreach ((ISpecies species, double value) linearPredictor in exponentialLinearPredictors) {
+                double sumOfOtherLinearPredictors = 0.0;
+                foreach ((ISpecies species, double value) exponentialLinearPredictor in exponentialLinearPredictors) {
+                    if (exponentialLinearPredictor.species == startingSpecies) {
+                        healthyExponentialLinearPredictor = exponentialLinearPredictor.value;
+                        continue;
+                    }
+                    sumOfOtherLinearPredictors += exponentialLinearPredictor.value;
+                }
+                
+                //outputTransitions[index] = 
+                index++;
+            }
+            Trace.Assert(healthyExponentialLinearPredictor != double.NegativeInfinity, "Healthy exponential linear predictor not found");
+            //1 is actualle e^0
+            return outputTransitions;
         }
     }
 }

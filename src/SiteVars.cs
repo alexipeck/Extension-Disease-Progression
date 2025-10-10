@@ -13,6 +13,7 @@ using Landis.Library.Succession.DemographicSeeding;
 using System.Threading.Tasks;
 using log4net.Core;
 using System.Dynamic;
+using System.Runtime.InteropServices;
 
 namespace Landis.Extension.Disturbance.DiseaseProgression
 {
@@ -481,8 +482,19 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 graphics.Clear(Color.Black);
                 using (Font font = new Font("Arial", fontScaleFactor * 12))
                 using (SolidBrush textBrush = new SolidBrush(Color.White))
-                using (Pen gridPen = new Pen(Color.DimGray, 1))
                 {
+                    using (Pen gridPen = new Pen(Color.DimGray, 1))
+                    {
+                        for (int gx = 1; gx < landscapeDimensions.x; gx++) {
+                            int x = gx * scaleFactor;
+                            graphics.DrawLine(gridPen, x, 0, x, imageHeight - 1);
+                        }
+                        for (int gy = 1; gy < landscapeDimensions.y; gy++) {
+                            int y = gy * scaleFactor;
+                            graphics.DrawLine(gridPen, 0, y, imageWidth - 1, y);
+                        }
+                        graphics.DrawRectangle(gridPen, 0, 0, imageWidth - 1, imageHeight - 1);
+                    }
                     StringFormat stringFormat = new StringFormat();
                     stringFormat.Alignment = StringAlignment.Center;
                     stringFormat.LineAlignment = StringAlignment.Center;
@@ -491,7 +503,6 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                             double value = SHI[CalculateCoordinatesToIndex(gridX, gridY, landscapeDimensions.x)];
                             int pixelX = gridX * scaleFactor;
                             int pixelY = gridY * scaleFactor;
-                            graphics.DrawRectangle(gridPen, pixelX, pixelY, scaleFactor, scaleFactor);
                             string text = DoubleFormatter(value);
                             RectangleF cellRect = new RectangleF(pixelX, pixelY, scaleFactor, scaleFactor);
                             graphics.DrawString(text, font, textBrush, cellRect, stringFormat);
@@ -513,46 +524,44 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             int imageWidth = landscapeDimensions.x * scaleFactor;
             int imageHeight = landscapeDimensions.y * scaleFactor;
             Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
-            Bitmap bitmap = new Bitmap(imageWidth, imageHeight, PixelFormat.Format32bppArgb);
-            
-            Color healthyColor = Color.Green;
-            Color infectedColor = Color.Red;
-            Color ignoredColor = Color.Blue;
-            foreach ((int x, int y) in healthySitesList) {
-                int actualX = (x - 1) * scaleFactor;
-                int actualY = (y - 1) * scaleFactor;
-                for (int i = 0; i < scaleFactor; i++) {
-                    for (int j = 0; j < scaleFactor; j++) {
-                        int pixelX = actualX + i;
-                        int pixelY = actualY + j;
-                        bitmap.SetPixel(pixelX, pixelY, healthyColor);
+            using (Bitmap bitmap = new Bitmap(imageWidth, imageHeight, PixelFormat.Format32bppArgb))
+            {
+                Rectangle rect = new Rectangle(0, 0, imageWidth, imageHeight);
+                BitmapData data = bitmap.LockBits(rect, ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+                try {
+                    int stride = data.Stride;
+                    IntPtr scan0 = data.Scan0;
+
+                    byte[] greenRow = new byte[scaleFactor * 4];
+                    byte[] redRow = new byte[scaleFactor * 4];
+                    byte[] blueRow = new byte[scaleFactor * 4];
+                    for (int i = 0; i < scaleFactor; i++) {
+                        int p = i * 4;
+                        blueRow[p + 0] = 255; blueRow[p + 1] = 0;   blueRow[p + 2] = 0;   blueRow[p + 3] = 255;
+                        greenRow[p + 0] = 0;   greenRow[p + 1] = 128; greenRow[p + 2] = 0;   greenRow[p + 3] = 255;
+                        redRow[p + 0] = 0;   redRow[p + 1] = 0;   redRow[p + 2] = 255; redRow[p + 3] = 255;
                     }
-                }
-            }
-            foreach ((int x, int y) in infectedSitesList) {
-                int actualX = (x - 1) * scaleFactor;
-                int actualY = (y - 1) * scaleFactor;
-                for (int i = 0; i < scaleFactor; i++) {
-                    for (int j = 0; j < scaleFactor; j++) {
-                        int pixelX = actualX + i;
-                        int pixelY = actualY + j;
-                        bitmap.SetPixel(pixelX, pixelY, infectedColor);
+
+                    void FillBlocks(List<(int x, int y)> coords, byte[] rowTemplate) {
+                        foreach ((int x, int y) in coords) {
+                            int actualX = (x - 1) * scaleFactor;
+                            int actualY = (y - 1) * scaleFactor;
+                            for (int jj = 0; jj < scaleFactor; jj++) {
+                                IntPtr dest = scan0 + (actualY + jj) * stride + actualX * 4;
+                                Marshal.Copy(rowTemplate, 0, dest, rowTemplate.Length);
+                            }
+                        }
                     }
+
+                    FillBlocks(healthySitesList, greenRow);
+                    FillBlocks(infectedSitesList, redRow);
+                    FillBlocks(ignoredSitesList, blueRow);
                 }
-            }
-            foreach ((int x, int y) in ignoredSitesList) {
-                int actualX = (x - 1) * scaleFactor;
-                int actualY = (y - 1) * scaleFactor;
-                for (int i = 0; i < scaleFactor; i++) {
-                    for (int j = 0; j < scaleFactor; j++) {
-                        int pixelX = actualX + i;
-                        int pixelY = actualY + j;
-                        bitmap.SetPixel(pixelX, pixelY, ignoredColor);
-                    }
+                finally {
+                    bitmap.UnlockBits(data);
                 }
+                bitmap.Save(outputPath, ImageFormat.Png);
             }
-            
-            bitmap.Save(outputPath, ImageFormat.Png);
         }
         public static void GenerateIntensityBitmap(string outputPath, double[] intensities) {
             int landscapeSize = LandscapeDimensions.x * LandscapeDimensions.y;
@@ -567,29 +576,45 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             int imageWidth = landscapeDimensions.x * scaleFactor;
             int imageHeight = landscapeDimensions.y * scaleFactor;
             Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
-            Bitmap bitmap = new Bitmap(imageWidth, imageHeight, PixelFormat.Format32bppArgb);
-            (double min, double max) = MinMaxActive(intensities);
-            bool useMinMax = !(double.IsInfinity(min) || double.IsInfinity(max) || max <= min);
+            using (Bitmap bitmap = new Bitmap(imageWidth, imageHeight, PixelFormat.Format32bppArgb))
+            {
+                (double min, double max) = MinMaxActive(intensities);
+                bool useMinMax = !(double.IsInfinity(min) || double.IsInfinity(max) || max <= min);
+                Rectangle rect = new Rectangle(0, 0, imageWidth, imageHeight);
+                BitmapData data = bitmap.LockBits(rect, ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+                try {
+                    int stride = data.Stride;
+                    IntPtr scan0 = data.Scan0;
+                    byte[] rowBuffer = new byte[scaleFactor * 4];
 
-            for (int i = 0; i < landscapeSize; i++) {
-                (int x, int y) coordinates = CalculateIndexToCoordinates(i, landscapeDimensions.x);
-                double v = intensities[i];
-                if (double.IsNaN(v) || double.IsInfinity(v)) v = 0.0;
-                double n = useMinMax ? (v - min) / (max - min) : v;
-                if (n < 0.0) n = 0.0; else if (n > 1.0) n = 1.0;
-                byte intensity = (byte)Math.Round(n * 255.0);
-                int actualX = coordinates.x * scaleFactor;
-                int actualY = coordinates.y * scaleFactor;
-                for (int ii = 0; ii < scaleFactor; ii++) {
-                    for (int jj = 0; jj < scaleFactor; jj++) {
-                        int pixelX = actualX + ii;
-                        int pixelY = actualY + jj;
-                        bitmap.SetPixel(pixelX, pixelY, Color.FromArgb(intensity, intensity, intensity));
+                    int width = landscapeDimensions.x;
+                    for (int i = 0; i < landscapeSize; i++) {
+                        (int x, int y) coordinates = CalculateIndexToCoordinates(i, width);
+                        double v = intensities[i];
+                        if (double.IsNaN(v) || double.IsInfinity(v)) v = 0.0;
+                        double n = useMinMax ? (v - min) / (max - min) : v;
+                        if (n < 0.0) n = 0.0; else if (n > 1.0) n = 1.0;
+                        byte intensity = (byte)Math.Round(n * 255.0);
+                        for (int k = 0; k < scaleFactor; k++) {
+                            int p = k * 4;
+                            rowBuffer[p + 0] = intensity;
+                            rowBuffer[p + 1] = intensity;
+                            rowBuffer[p + 2] = intensity;
+                            rowBuffer[p + 3] = 255;
+                        }
+                        int actualX = coordinates.x * scaleFactor;
+                        int actualY = coordinates.y * scaleFactor;
+                        for (int jj = 0; jj < scaleFactor; jj++) {
+                            IntPtr dest = scan0 + (actualY + jj) * stride + actualX * 4;
+                            Marshal.Copy(rowBuffer, 0, dest, rowBuffer.Length);
+                        }
                     }
                 }
+                finally {
+                    bitmap.UnlockBits(data);
+                }
+                bitmap.Save(outputPath, ImageFormat.Png);
             }
-            
-            bitmap.Save(outputPath, ImageFormat.Png);
         }
         public static void GenerateMultiStateBitmap(string outputPath, Color[] colours) {
             byte scaleFactor = 120;
@@ -609,24 +634,28 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 graphics.Clear(Color.Black);
                 graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.None;
                 graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
-                for (int gridY = 0; gridY < landscapeDimensions.y; gridY++) {
-                    for (int gridX = 0; gridX < landscapeDimensions.x; gridX++) {
-                        int index = CalculateCoordinatesToIndex(gridX, gridY, landscapeDimensions.x);
-                        if (index < 0 || index >= colours.Length) continue;
-                        Color c = colours[index];
-                        int pixelX = gridX * scaleFactor;
-                        int pixelY = gridY * scaleFactor;
-                        int halfW = scaleFactor / 2;
-                        int halfH = scaleFactor / 2;
-                        Rectangle tl = new Rectangle(pixelX, pixelY, halfW, halfH);
-                        Rectangle tr = new Rectangle(pixelX + halfW, pixelY, scaleFactor - halfW, halfH);
-                        Rectangle bl = new Rectangle(pixelX, pixelY + halfH, halfW, scaleFactor - halfH);
-                        Rectangle br = new Rectangle(pixelX + halfW, pixelY + halfH, scaleFactor - halfW, scaleFactor - halfH);
-                        using (SolidBrush brTL = new SolidBrush(Color.FromArgb(255, c.R, 0, 0)))
-                        using (SolidBrush brTR = new SolidBrush(Color.FromArgb(255, 0, c.G, 0)))
-                        using (SolidBrush brBL = new SolidBrush(Color.FromArgb(255, 0, 0, c.B)))
-                        using (SolidBrush brBR = new SolidBrush(Color.FromArgb(255, c.R, c.G, c.B)))
-                        {
+                using (SolidBrush brTL = new SolidBrush(Color.Black))
+                using (SolidBrush brTR = new SolidBrush(Color.Black))
+                using (SolidBrush brBL = new SolidBrush(Color.Black))
+                using (SolidBrush brBR = new SolidBrush(Color.Black))
+                {
+                    for (int gridY = 0; gridY < landscapeDimensions.y; gridY++) {
+                        for (int gridX = 0; gridX < landscapeDimensions.x; gridX++) {
+                            int index = CalculateCoordinatesToIndex(gridX, gridY, landscapeDimensions.x);
+                            if (index < 0 || index >= colours.Length) continue;
+                            Color c = colours[index];
+                            int pixelX = gridX * scaleFactor;
+                            int pixelY = gridY * scaleFactor;
+                            int halfW = scaleFactor / 2;
+                            int halfH = scaleFactor / 2;
+                            Rectangle tl = new Rectangle(pixelX, pixelY, halfW, halfH);
+                            Rectangle tr = new Rectangle(pixelX + halfW, pixelY, scaleFactor - halfW, halfH);
+                            Rectangle bl = new Rectangle(pixelX, pixelY + halfH, halfW, scaleFactor - halfH);
+                            Rectangle br = new Rectangle(pixelX + halfW, pixelY + halfH, scaleFactor - halfW, scaleFactor - halfH);
+                            brTL.Color = Color.FromArgb(255, c.R, 0, 0);
+                            brTR.Color = Color.FromArgb(255, 0, c.G, 0);
+                            brBL.Color = Color.FromArgb(255, 0, 0, c.B);
+                            brBR.Color = Color.FromArgb(255, c.R, c.G, c.B);
                             graphics.FillRectangle(brTL, tl);
                             graphics.FillRectangle(brTR, tr);
                             graphics.FillRectangle(brBL, bl);
@@ -666,16 +695,17 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 graphics.Clear(Color.Black);
                 graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.None;
                 graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
-                for (int gridY = 0; gridY < landscapeDimensions.y; gridY++) {
-                    for (int gridX = 0; gridX < landscapeDimensions.x; gridX++) {
-                        int index = CalculateCoordinatesToIndex(gridX, gridY, landscapeDimensions.x);
-                        if (index < 0 || index >= colours.Length) continue;
-                        Color c = colours[index];
-                        int pixelX = gridX * scaleFactor;
-                        int pixelY = gridY * scaleFactor;
-                        Rectangle cell = new Rectangle(pixelX, pixelY, scaleFactor, scaleFactor);
-                        using (SolidBrush brush = new SolidBrush(c))
-                        {
+                using (SolidBrush brush = new SolidBrush(Color.Black))
+                {
+                    for (int gridY = 0; gridY < landscapeDimensions.y; gridY++) {
+                        for (int gridX = 0; gridX < landscapeDimensions.x; gridX++) {
+                            int index = CalculateCoordinatesToIndex(gridX, gridY, landscapeDimensions.x);
+                            if (index < 0 || index >= colours.Length) continue;
+                            Color c = colours[index];
+                            int pixelX = gridX * scaleFactor;
+                            int pixelY = gridY * scaleFactor;
+                            Rectangle cell = new Rectangle(pixelX, pixelY, scaleFactor, scaleFactor);
+                            brush.Color = c;
                             graphics.FillRectangle(brush, cell);
                         }
                     }
