@@ -393,7 +393,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             PlugIn.ModelCore.UI.WriteLine($"  Exhaustive probability tolerance: {exhaustiveProbabilityTolerance}");
             PlugIn.ModelCore.UI.WriteLine("  Groups:");
             foreach (var g in groupHealthy.Keys) {
-                PlugIn.ModelCore.UI.WriteLine($"    {g}: healthy={groupHealthy[g].Name}, infected=[{string.Join(", ", groupInfected[g])}]");
+                PlugIn.ModelCore.UI.WriteLine($"    {g}: healthy={groupHealthy[g].Name}, infected=[{string.Join(", ", groupInfected[g].Select(s => s.Name))}]");
             }
             PlugIn.ModelCore.UI.WriteLine("  Designated healthy species:");
             foreach (var hs in parameters.DesignatedHealthySpecies) PlugIn.ModelCore.UI.WriteLine($"    {hs.Name}");
@@ -429,12 +429,14 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
 				var ageMap = srcEntry.Value;
 				var ages = new List<ushort>(ageMap.Keys);
 				ages.Sort();
+                PlugIn.ModelCore.UI.WriteLine($"    source={sp.Name}:");
 				foreach (ushort age in ages) {
 					var targetMap = ageMap[age];
+                    PlugIn.ModelCore.UI.WriteLine($"      age {age}:");
                     foreach (var kv in targetMap) {
                         var targetSpecies = kv.Item1;
                         var coeff = kv.Item2;
-                        PlugIn.ModelCore.UI.WriteLine($"    source={sp.Name}, age {age}, target={(targetSpecies == null ? "DEAD" : targetSpecies.Name)}: b0={coeff.B0}, b1={coeff.B1}, dbh={coeff.DBH}, b2={coeff.B2}");
+                        PlugIn.ModelCore.UI.WriteLine($"        target={(targetSpecies == null ? "DEAD" : targetSpecies.Name)}: b0={coeff.B0}, b1={coeff.B1}, dbh={coeff.DBH}, b2={coeff.B2}");
                     }
 				}
 			}

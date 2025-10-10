@@ -139,8 +139,35 @@ namespace Landis.Extension.Disturbance.DiseaseProgression {
                 }
             }
         }
-
-        public static void PrecalculateSpeciesDistributionTransitions() {
+        //does not currently take into account the timestep
+        public static void PrecalculateSpeciesDistributionTransitions(Dictionary<ISpecies, Dictionary<ushort, List<(ISpecies, SoftmaxInputs)>>> speciesSoftmaxParameters) {
+            Dictionary<ISpecies, Dictionary<ushort, (ISpecies, double)[]>> exponentialLinearPredictors = new Dictionary<ISpecies, Dictionary<ushort, (ISpecies, double)[]>>();
+            foreach (var speciesEntry in speciesSoftmaxParameters) {
+				ISpecies species = speciesEntry.Key;
+				Dictionary<ushort, List<(ISpecies, SoftmaxInputs)>> ageMap = speciesEntry.Value;
+				List<ushort> ages = new List<ushort>(ageMap.Keys);
+				ages.Sort(); //not necessary
+				foreach (ushort age in ages) {
+					List<(ISpecies, SoftmaxInputs)> targetMap = ageMap[age];
+                    exponentialLinearPredictors[species][age] = new (ISpecies, double)[targetMap.Count];
+                    for (int i = 0; i < targetMap.Count; i++) {
+                        (ISpecies, SoftmaxInputs) target = targetMap[i];
+                        SoftmaxInputs softmaxInputs = target.Item2;
+                        exponentialLinearPredictors[species][age][i] = (target.Item1, softmaxInputs.B0 + (softmaxInputs.B1 * softmaxInputs.DBH) + softmaxInputs.B2);
+                    }
+				}
+			}
+            foreach (var speciesEntry in exponentialLinearPredictors) {
+                ISpecies species = speciesEntry.Key;
+                foreach (var ageEntry in speciesEntry.Value) {
+                    ushort age = ageEntry.Key;
+                    foreach (var predictor in ageEntry.Value) {
+                        ISpecies targetSpecies = predictor.Item1;
+                        double value = predictor.Item2;
+                        Console.WriteLine($"Species: {species.Name}, Age: {age}, Target Species: {targetSpecies.Name}, Value: {value}");
+                    }
+                }
+            }
             //maybe take input as (ISpecies, ISpecies[])[] speciesGroups to denote the healthy species and the progressions
             //need to take input of the max age for each species/pseudo-species group
             /* species groups {
