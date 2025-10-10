@@ -271,9 +271,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                             if (!double.TryParse(Convert.ToString(targetKv.Value), out double prob)) throw new InputValueException(Convert.ToString(targetKv.Value), $"Invalid probability for target '{targetName}' in [transition.preprocessed.{sourceName}.{ageKv.Key}].");
                             if (prob < 0.0 || prob > 1.0) throw new InputValueException(Convert.ToString(targetKv.Value), $"Probability for target '{targetName}' in [transition.preprocessed.{sourceName}.{ageKv.Key}] must be between 0.0 and 1.0.");
                             ISpecies targetSpecies;
-                            if (string.Equals(targetName, "DEAD", StringComparison.OrdinalIgnoreCase)) targetSpecies = null;
-                            else
-                            {
+                            if (string.Equals(targetName, "DEAD", StringComparison.OrdinalIgnoreCase)) {
+                                targetSpecies = null;
+                            } else {
                                 if (!speciesNameToISpecies.TryGetValue(targetName, out targetSpecies)) throw new InputValueException(targetName, $"Species '{targetName}' in [transition.preprocessed.{sourceName}.{ageKv.Key}] does not exist.");
                                 if (!speciesToGroup.TryGetValue(targetSpecies, out string targetGroup) || !string.Equals(targetGroup, groupName, StringComparison.OrdinalIgnoreCase)) throw new InputValueException(targetName, $"Target species '{targetName}' must belong to the same group as source '{sourceName}'.");
                             }
@@ -362,6 +362,34 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 }
             }
 
+            var softmaxTransitions = Auxiliary.PrecalculateSpeciesDistributionTransitions(softmaxParameters);
+            foreach (var kv in softmaxTransitions) {
+                var sourceSpecies = kv.Key;
+                if (!speciesToGroup.TryGetValue(sourceSpecies, out string groupName)) continue;
+                if (!groupDataProvider.TryGetValue(groupName, out DataProvider gp) || gp != DataProvider.Softmax) continue;
+                MissingBelowRangeMethod below = defaultBelowEnum;
+                MissingInRangeMethod inRange = defaultInRangeEnum;
+                MissingAboveRangeMethod above = defaultAboveEnum;
+                bool exhaustiveLocal = exhaustiveProbability;
+                double toleranceLocal = exhaustiveProbabilityTolerance;
+                if (groupTable[groupName] is IDictionary<string, object> groupCfg2) {
+                    if (groupCfg2.TryGetValue("missing_below_range_method", out var gb2) && gb2 != null) below = ParseBelow(Convert.ToString(gb2));
+                    if (groupCfg2.TryGetValue("missing_in_range_method", out var gi2) && gi2 != null) inRange = ParseInRange(Convert.ToString(gi2));
+                    if (groupCfg2.TryGetValue("missing_above_range_method", out var ga2) && ga2 != null) above = ParseAbove(Convert.ToString(ga2));
+                    if (groupCfg2.TryGetValue("exhaustive_probability", out var ge2) && ge2 != null) exhaustiveLocal = Convert.ToBoolean(ge2);
+                    if (groupCfg2.TryGetValue("exhaustive_probability_tolerance", out var gtol2) && gtol2 != null) {
+                        toleranceLocal = Convert.ToDouble(gtol2);
+                        if (toleranceLocal < 0) throw new InputValueException($"transition.group.{groupName}.exhaustive_probability_tolerance", "Tolerance must be 0 or greater.");
+                    }
+                }
+                var ageMatrix = new Dictionary<ushort, (ISpecies, double)[]>();
+                foreach (var ageEntry in kv.Value) {
+                    ageMatrix[ageEntry.Key] = ageEntry.Value;
+                }
+                var speciesMatrix = new SpeciesAgeMatrix(sourceSpecies, groupHealthy[groupName], ageMatrix, below, inRange, above, exhaustiveLocal, toleranceLocal);
+                speciesMatrices[sourceSpecies] = speciesMatrix;
+            }
+
             parameters.SpeciesTransitionAgeMatrix = speciesMatrices;
             parameters.SpeciesSoftmaxInputs = softmaxParameters;
 
@@ -439,9 +467,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                         PlugIn.ModelCore.UI.WriteLine($"        target={(targetSpecies == null ? "DEAD" : targetSpecies.Name)}: b0={coeff.B0}, b1={coeff.B1}, dbh={coeff.DBH}, b2={coeff.B2}");
                     }
 				}
-			}
-
-            Auxiliary.PrecalculateSpeciesDistributionTransitions(parameters.SpeciesSoftmaxInputs);
+            }
 
             //Environment.Exit(1);
             return parameters;

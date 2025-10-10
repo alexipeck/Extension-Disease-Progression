@@ -140,7 +140,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression {
             }
         }
         //does not currently take into account the timestep
-        public static void PrecalculateSpeciesDistributionTransitions(Dictionary<ISpecies, Dictionary<ushort, List<(ISpecies, SoftmaxInputs)>>> speciesSoftmaxParameters) {
+        public static Dictionary<ISpecies, Dictionary<ushort, (ISpecies, double)[]>> PrecalculateSpeciesDistributionTransitions(Dictionary<ISpecies, Dictionary<ushort, List<(ISpecies, SoftmaxInputs)>>> speciesSoftmaxParameters) {
             Dictionary<ISpecies, Dictionary<ushort, (ISpecies, double)[]>> exponentialLinearPredictors = new Dictionary<ISpecies, Dictionary<ushort, (ISpecies, double)[]>>();
             foreach (var speciesEntry in speciesSoftmaxParameters) {
 				ISpecies species = speciesEntry.Key;
@@ -221,6 +221,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression {
             
             //process all coefficients into exponentialLinearPredictors
 
+            return transitionsArray;
         }
         //assumes disease progression only (regression not implemented)
         public static (ISpecies, double)[] T(ISpecies startingSpecies, (ISpecies, double)[] coefficients) {
