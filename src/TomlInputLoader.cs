@@ -441,6 +441,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
 				}
 			}
 
+            Auxiliary.PrecalculateSpeciesDistributionTransitions(parameters.SpeciesSoftmaxInputs);
+
             //Environment.Exit(1);
             return parameters;
         }

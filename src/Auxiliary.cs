@@ -149,22 +149,60 @@ namespace Landis.Extension.Disturbance.DiseaseProgression {
 				ages.Sort(); //not necessary
 				foreach (ushort age in ages) {
 					List<(ISpecies, SoftmaxInputs)> targetMap = ageMap[age];
+                    if (!exponentialLinearPredictors.ContainsKey(species)) exponentialLinearPredictors[species] = new Dictionary<ushort, (ISpecies, double)[]>();
+                    if (!exponentialLinearPredictors[species].ContainsKey(age)) exponentialLinearPredictors[species][age] = new (ISpecies, double)[targetMap.Count];
                     exponentialLinearPredictors[species][age] = new (ISpecies, double)[targetMap.Count];
                     for (int i = 0; i < targetMap.Count; i++) {
                         (ISpecies, SoftmaxInputs) target = targetMap[i];
                         SoftmaxInputs softmaxInputs = target.Item2;
-                        exponentialLinearPredictors[species][age][i] = (target.Item1, softmaxInputs.B0 + (softmaxInputs.B1 * softmaxInputs.DBH) + softmaxInputs.B2);
+                        exponentialLinearPredictors[species][age][i] = (target.Item1, Math.Exp(softmaxInputs.B0 + (softmaxInputs.B1 * softmaxInputs.DBH) + softmaxInputs.B2));
                     }
 				}
 			}
+            Dictionary<ISpecies, Dictionary<ushort, List<(ISpecies, double)>>> transitions = new Dictionary<ISpecies, Dictionary<ushort, List<(ISpecies, double)>>>();
             foreach (var speciesEntry in exponentialLinearPredictors) {
                 ISpecies species = speciesEntry.Key;
                 foreach (var ageEntry in speciesEntry.Value) {
                     ushort age = ageEntry.Key;
-                    foreach (var predictor in ageEntry.Value) {
-                        ISpecies targetSpecies = predictor.Item1;
-                        double value = predictor.Item2;
-                        Console.WriteLine($"Species: {species.Name}, Age: {age}, Target Species: {targetSpecies.Name}, Value: {value}");
+                    var localExponentialLinearPredictors = ageEntry.Value;
+                    foreach (var predictor in localExponentialLinearPredictors) {
+                        //List<(ISpecies, double)> ageEntryMinusSelf = new List<(ISpecies, double)>();
+                        double sumOfOtherLinearPredictors = 0.0;
+                        foreach (var transition in localExponentialLinearPredictors) {
+                            if (transition.Item1 != predictor.Item1) {
+                                sumOfOtherLinearPredictors += transition.Item2;
+                                //ageEntryMinusSelf.Add(transition);
+                            }
+                        }
+                        double value = predictor.Item2 / (1 + sumOfOtherLinearPredictors);
+                        if (!transitions.ContainsKey(species)) transitions[species] = new Dictionary<ushort, List<(ISpecies, double)>>();
+                        if (!transitions[species].ContainsKey(age)) transitions[species][age] = new List<(ISpecies, double)>();
+                        transitions[species][age].Add((predictor.Item1, value));
+                        //ISpecies targetSpecies = predictor.Item1;
+                        //double value = predictor.Item2;
+                        //Console.WriteLine($"Species: {species.Name}, Age: {age}, Target Species: {targetSpecies.Name}, Value: {value}");
+                    }
+                }
+            }
+            Dictionary<ISpecies, Dictionary<ushort, (ISpecies, double)[]>> transitionsArray = new Dictionary<ISpecies, Dictionary<ushort, (ISpecies, double)[]>>();
+            foreach (var speciesEntry in transitions) {
+                ISpecies species = speciesEntry.Key;
+                transitionsArray[species] = new Dictionary<ushort, (ISpecies, double)[]>();
+                foreach (var ageEntry in speciesEntry.Value) {
+                    ushort age = ageEntry.Key;
+                    List<(ISpecies, double)> transitionList = ageEntry.Value;
+                    transitionsArray[species][age] = transitionList.ToArray();
+                }
+            }
+            foreach (var speciesEntry in transitionsArray) {
+                ISpecies sourceSpecies = speciesEntry.Key;
+                foreach (var ageEntry in speciesEntry.Value) {
+                    ushort age = ageEntry.Key;
+                    (ISpecies, double)[] transitionArray = ageEntry.Value;
+                    foreach (var transition in transitionArray) {
+                        ISpecies targetSpecies = transition.Item1;
+                        double value = transition.Item2;
+                        Console.WriteLine($"Source Species: {(sourceSpecies == null ? "DEAD" : sourceSpecies.Name)}, Age: {age}, Target Species: {(targetSpecies == null ? "DEAD" : targetSpecies.Name)}, Value: {value}");
                     }
                 }
             }
