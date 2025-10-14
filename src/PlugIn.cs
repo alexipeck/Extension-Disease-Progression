@@ -54,12 +54,29 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
        
         public override void Initialize()
         {
+            Log.Init();
             SiteVars.Initialize(ModelCore, parameters);
-            ModelCore.UI.WriteLine("Species selected for disease progression:");
+            Log.Info(LogType.General, "Species selected for disease progression:");
             foreach (ISpecies speciesName in parameters.SpeciesTransitionAgeMatrix.Keys) {
-                ModelCore.UI.WriteLine($"{speciesName.Name}");
+                Log.Info(LogType.General, $"{speciesName.Name}");
             }
-            ModelCore.UI.WriteLine("");
+            {
+                foreach (var kvp in parameters.SpeciesTransitionAgeMatrix) {
+                    var sp = kvp.Key;
+                    var mat = kvp.Value;
+                    var dict = (Dictionary<ushort, (ISpecies, double)[]>)kvp.Value.GetType().GetField("_ageTransitionMatrix", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(kvp.Value);
+                    var ages = new List<ushort>(dict.Keys);
+                    ages.Sort();
+                    foreach (ushort age in ages) {
+                        var dist = dict[age];
+                        var parts = new List<string>();
+                        foreach (var t in dist) {
+                            parts.Add($"{(t.Item1 == null ? "DEAD" : t.Item1.Name)}={t.Item2}");
+                        }
+                        Log.Info(LogType.General, $"transition.data.{sp.Name}.{age}: {string.Join(", ", parts)}");
+                    }
+                }
+            }
             Timestep = parameters.Timestep;
             
             string[] pathsToEmpty = new string[] { "./infection_timeline", "./shi_timeline", "./shim_timeline", "./shim_normalized_timeline", "./foi_timeline", "./foi_colourised_timeline", "./infection_timeline_multi", "./overall_timeline" };
@@ -69,34 +86,34 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     foreach (System.IO.FileInfo file in directory.GetFiles()) {
                         file.Delete();
                     }
-                    ModelCore.UI.WriteLine($"Emptied folder: {path}");
+                    Log.Info(LogType.General, $"Emptied folder: {path}");
                 }
             }
 
             {
-                ModelCore.UI.WriteLine("Starting initial infection map application");
+                Log.Info(LogType.General, "Starting initial infection map application");
                 bool[] initialInfectionMap = InitialInfectionMap;
                 if (initialInfectionMap != null) {
                     int index = 0;
                     foreach (bool value in initialInfectionMap) {
                         if (value == true) {
-                            ModelCore.UI.WriteLine($"Applying initial infection map to site at index: {index}");
+                            Log.Info(LogType.General, $"Applying initial infection map to site at index: {index}");
                         }
                         index++;
                     }
-                    ProportionSites(ModelCore.Landscape.ActiveSites, initialInfectionMap, LandscapeDimensions.x, type, true);
+                    ProportionSites(ModelCore.Landscape.ActiveSites, initialInfectionMap, LandscapeDimensions.x, type);
                 }
-                ModelCore.UI.WriteLine("Finished applying initial infection map");
+                Log.Info(LogType.General, "Finished applying initial infection map");
             }
             
-            ModelCore.UI.WriteLine("Disease progression initialized");
+            Log.Info(LogType.General, "Disease progression initialized");
         }
 
         //---------------------------------------------------------------------
         public override void Run()
         {
             //DumpSiteInformation(ModelCore.Landscape.ActiveSites);
-            ModelCore.UI.WriteLine("Running disease progression");
+            Log.Info(LogType.General, "Running disease progression");
             //////// DEBUG PARAMETERS
             //bool debugOutputTransitions = false;
             //bool debugDumpSiteInformation = false;
@@ -104,7 +121,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             //      I need a boolean check to ensure that the thread has stopped
             //      The thread is needed as is can save something like 7 steps per timestep
             ////////
-            
+            Log.Info(LogType.General, $"Running timestep (marker for general): {ModelCore.CurrentTime}");
+            Log.Info(LogType.Timing, $"Running timestep (marker for timing): {ModelCore.CurrentTime}");
+            Log.Info(LogType.Transitions, $"Running timestep (marker for transitions): {ModelCore.CurrentTime}");
             int distanceDispersalDecayMatrixWidth = DistanceDispersalDecayMatrixWidth;
             int distanceDispersalDecayMatrixHeight = DistanceDispersalDecayMatrixHeight;
             IEnumerable<ActiveSite> sites = ModelCore.Landscape.ActiveSites;
@@ -127,7 +146,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             /// NOTE: This is entirely to counteract the succession libraries simulated natural spread
             stopwatch.Start();
             ReplaceAge1InfectedWithHealthy(sites, parameters);
-            ModelCore.UI.WriteLine($"Finished replacing age 1 infected with healthy: {stopwatch.ElapsedMilliseconds} ms");
+            Log.Info(LogType.General, $"Finished replacing age 1 infected with healthy: {stopwatch.ElapsedMilliseconds} ms");
             stopwatch.Reset();
             ////////
 
@@ -143,7 +162,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
 				}
 			}
 			DecrementResproutLifetimes();
-            ModelCore.UI.WriteLine($"Finished resprouting: {stopwatch.ElapsedMilliseconds} ms");
+            Log.Info(LogType.General, $"Finished resprouting: {stopwatch.ElapsedMilliseconds} ms");
             stopwatch.Reset();
             ////////
 
@@ -153,7 +172,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
              List<int> infectedSitesListIndices,
              List<int> ignoredSitesListIndices) = 
                 InfectionStateDetection(sites, parameters, landscapeX, landscapeSize);
-            ModelCore.UI.WriteLine($"Finished infection state detection: {stopwatch.ElapsedMilliseconds} ms");
+            Log.Info(LogType.General, $"Finished infection state detection: {stopwatch.ElapsedMilliseconds} ms");
             stopwatch.Reset();
 
             stopwatch.Start();
@@ -168,7 +187,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 //do we want to say that when a site is infected, that it's probability should be reset back to 1
                 //or do we leave it to dynamically change based existing math?
             }
-            ModelCore.UI.WriteLine($"Finished enforcing infected probability: {stopwatch.ElapsedMilliseconds} ms");
+            Log.Info(LogType.General, $"Finished enforcing infected probability: {stopwatch.ElapsedMilliseconds} ms");
             stopwatch.Reset();
             
             double[] SHIM = new double[landscapeSize];
@@ -185,7 +204,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 SHIM[index] = CalculateSiteHostIndexModified(SHI, 0.0, 0.0);
                 SHIMSum += SHIM[index];
             }
-            ModelCore.UI.WriteLine($"Finished calculating SHI & SHIM: {stopwatch.ElapsedMilliseconds} ms");
+            Log.Info(LogType.General, $"Finished calculating SHI & SHIM: {stopwatch.ElapsedMilliseconds} ms");
             stopwatch.Reset();
             ExportNumericalBitmap(SHIM, "./shim_timeline/shim_state", "SHIM");
             
@@ -212,13 +231,13 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 //      than 0 but mathematically it's fine unless SHIMMean is 0
                 SHIM[i] /= SHIMMean;
             }
-            ModelCore.UI.WriteLine($"Finished normalizing SHIM: {stopwatch.ElapsedMilliseconds} ms");
+            Log.Info(LogType.General, $"Finished normalizing SHIM: {stopwatch.ElapsedMilliseconds} ms");
             stopwatch.Reset();
             ExportNumericalBitmap(SHIM, "./shim_normalized_timeline/shim_normalized_state", "SHI Normalized");
 
             stopwatch.Start();
             double[] FOI = CalculateForceOfInfection(landscapeSize, SHIM);
-            ModelCore.UI.WriteLine($"Finished calculating FOI: {stopwatch.ElapsedMilliseconds} ms");
+            Log.Info(LogType.General, $"Finished calculating FOI: {stopwatch.ElapsedMilliseconds} ms");
             stopwatch.Reset();
             ExportNumericalBitmap(FOI, "./foi_timeline/foi_state", "FOI");
             double[] FOIScaled = new double[landscapeSize];
@@ -248,15 +267,15 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 }
             }
             
-            ModelCore.UI.WriteLine($"Finished determining which sites are newly infected: {stopwatch.ElapsedMilliseconds} ms");
+            Log.Info(LogType.General, $"Finished determining which sites are newly infected: {stopwatch.ElapsedMilliseconds} ms");
             ///////////////////
             
             stopwatch.Start();
-            ProportionSites(sites, sitesForProportioning, landscapeX, type, false);
-            ModelCore.UI.WriteLine($"Finished proportioning and rewriting SiteCohorts for all sites: {stopwatch.ElapsedMilliseconds} ms");
+            ProportionSites(sites, sitesForProportioning, landscapeX, type);
+            Log.Info(LogType.General, $"Finished proportioning and rewriting SiteCohorts for all sites: {stopwatch.ElapsedMilliseconds} ms");
             stopwatch.Reset();
             globalTimer.Stop();
-            ModelCore.UI.WriteLine($"DiseaseProgression timestep took: {globalTimer.ElapsedMilliseconds} ms");
+            Log.Info(LogType.General, $"DiseaseProgression timestep took: {globalTimer.ElapsedMilliseconds} ms");
         }
         private static void ReplaceAge1InfectedWithHealthy(IEnumerable<ActiveSite> sites, IInputParameters parameters) {
             Dictionary<ISpecies, Dictionary<ushort, (int biomass, Dictionary<string, int> additionalParameters)>> newSiteCohortsDictionary = new Dictionary<ISpecies, Dictionary<ushort, (int biomass, Dictionary<string, int> additionalParameters)>>();
@@ -343,9 +362,6 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 bool containsHealthySpecies = false;
                 bool containsInfectedSpecies = false;
                 foreach (ISpeciesCohorts speciesCohorts in SiteVars.Cohorts[site]) {
-                    if (CalculateCoordinatesToIndex(site.Location.Column - 1, site.Location.Row - 1, landscapeX) == 4940) {
-                        Console.WriteLine($"species: {speciesCohorts.Species.Name}");
-                    }
                     ISpecies designatedHealthySpecies = parameters.GetDesignatedHealthySpecies(speciesCohorts.Species);
                     //Console.WriteLine($"Looking at species: {speciesCohorts.Species.Name}{(designatedHealthySpecies != null ? $", it's designated healthy species is: {designatedHealthySpecies.Name}" : "")}");
                     if (designatedHealthySpecies != null && speciesCohorts.Species == designatedHealthySpecies) {
@@ -395,11 +411,11 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                         GenerateMultiStateBitmap(outputPath, colors);
                     }
                     catch (Exception ex) {
-                        ModelCore.UI.WriteLine($"Debug bitmap generation failed: {ex.Message}");
+                        Log.Error(LogType.General, $"Debug bitmap generation failed: {ex.Message}");
                         throw;
                     }
                     outputStopwatch.Stop();
-                    ModelCore.UI.WriteLine($"      Finished outputting multi-state: {outputStopwatch.ElapsedMilliseconds} ms");
+                    Log.Info(LogType.General, $"      Finished outputting multi-state: {outputStopwatch.ElapsedMilliseconds} ms");
                 });
             }
 
@@ -413,20 +429,20 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                         GenerateOverallStateBitmap(outputPath, colors);
                     }
                     catch (Exception ex) {
-                        ModelCore.UI.WriteLine($"Debug bitmap generation failed: {ex.Message}");
+                        Log.Error(LogType.General, $"Debug bitmap generation failed: {ex.Message}");
                         throw;
                     }
                     outputStopwatch.Stop();
-                    ModelCore.UI.WriteLine($"      Finished outputting overall state: {outputStopwatch.ElapsedMilliseconds} ms");
+                    Log.Info(LogType.General, $"      Finished outputting overall state: {outputStopwatch.ElapsedMilliseconds} ms");
                 });
             }
 
             {
                 Task.Run(() => {
-                    ModelCore.UI.WriteLine($"Healthy sites: {healthySitesList.Count}");
-                    ModelCore.UI.WriteLine($"Infected sites: {infectedSitesList.Count}");
-                    ModelCore.UI.WriteLine($"Ignored sites: {ignoredSitesList.Count}");
-                    ModelCore.UI.WriteLine($"Newly infected sites: {infectedSitesList.Count - infectedSitesList.Count}");
+                    Log.Info(LogType.General, $"Healthy sites: {healthySitesList.Count}");
+                    Log.Info(LogType.General, $"Infected sites: {infectedSitesList.Count}");
+                    Log.Info(LogType.General, $"Ignored sites: {ignoredSitesList.Count}");
+                    Log.Info(LogType.General, $"Newly infected sites: {infectedSitesList.Count - infectedSitesList.Count}");
                     
                     Stopwatch outputStopwatch = new Stopwatch();
                     outputStopwatch.Start();
@@ -435,11 +451,11 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                         GenerateInfectionStateBitmap(outputPath, healthySitesList, infectedSitesList, ignoredSitesList);
                     }
                     catch (Exception ex) {
-                        ModelCore.UI.WriteLine($"Debug bitmap generation failed: {ex.Message}");
+                        Log.Error(LogType.General, $"Debug bitmap generation failed: {ex.Message}");
                         throw;
                     }
                     outputStopwatch.Stop();
-                    ModelCore.UI.WriteLine($"      Finished outputting infection state: {outputStopwatch.ElapsedMilliseconds} ms");
+                    Log.Info(LogType.General, $"      Finished outputting infection state: {outputStopwatch.ElapsedMilliseconds} ms");
                 });
             }
 

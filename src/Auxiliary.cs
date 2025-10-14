@@ -71,10 +71,10 @@ namespace Landis.Extension.Disturbance.DiseaseProgression {
                     SiteVars.GenerateIntensityBitmap(outputPath, dataCopy);
                 }
                 catch (Exception ex) {
-                    PlugIn.ModelCore.UI.WriteLine($"Debug bitmap generation failed: {ex.Message}");
+                    Log.Error(LogType.General, $"Debug bitmap generation failed: {ex.Message}");
                 }
                 outputStopwatch.Stop();
-                PlugIn.ModelCore.UI.WriteLine($"      Finished outputting {label} state: {outputStopwatch.ElapsedMilliseconds} ms");
+                Log.Info(LogType.General, $"      Finished outputting {label} state: {outputStopwatch.ElapsedMilliseconds} ms");
             });
         }
         public static void ExportNumericalBitmap(double[] data, string filePathPrefix, string label) {
@@ -88,11 +88,11 @@ namespace Landis.Extension.Disturbance.DiseaseProgression {
                     SiteVars.GenerateNumericalStateBitmap(outputPath, dataCopy);
                 }
                 catch (Exception ex) {
-                    PlugIn.ModelCore.UI.WriteLine($"Debug bitmap generation failed: {ex.Message}");
+                    Log.Error(LogType.General, $"Debug bitmap generation failed: {ex.Message}");
                     throw;
                 }
                 outputStopwatch.Stop();
-                PlugIn.ModelCore.UI.WriteLine($"      Finished outputting {label} state: {outputStopwatch.ElapsedMilliseconds} ms");
+                Log.Info(LogType.General, $"      Finished outputting {label} state: {outputStopwatch.ElapsedMilliseconds} ms");
             });
         }
         public static string DoubleFormatter(double value) {
@@ -134,7 +134,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression {
             foreach (ActiveSite site in sites) {
                 foreach (ISpeciesCohorts speciesCohorts in SiteVars.Cohorts[site]) {
                     foreach (ICohort cohort in speciesCohorts) {
-                        Console.WriteLine($"Species: {speciesCohorts.Species.Name}, biomass: {cohort.Data.Biomass}");
+                        Log.Info(LogType.General, $"Species: {speciesCohorts.Species.Name}, biomass: {cohort.Data.Biomass}");
                     }
                 }
             }
@@ -202,7 +202,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression {
                     foreach (var transition in transitionArray) {
                         ISpecies targetSpecies = transition.Item1;
                         double value = transition.Item2;
-                        Console.WriteLine($"Source Species: {(sourceSpecies == null ? "DEAD" : sourceSpecies.Name)}, Age: {age}, Target Species: {(targetSpecies == null ? "DEAD" : targetSpecies.Name)}, Value: {value}");
+                        Log.Info(LogType.General, $"Source Species: {(sourceSpecies == null ? "DEAD" : sourceSpecies.Name)}, Age: {age}, Target Species: {(targetSpecies == null ? "DEAD" : targetSpecies.Name)}, Value: {value}");
                     }
                 }
             }

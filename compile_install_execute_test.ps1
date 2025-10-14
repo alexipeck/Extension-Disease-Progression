@@ -40,7 +40,7 @@ cd $LandisExecutionDir
 $landisExitCode = $null
 try {
     Write-Output "Executing LANDIS-II..."
-    landis-ii-8.cmd .\scenario.txt 2>&1 | Tee-Object -FilePath console-output.txt
+    landis-ii-8.cmd .\scenario.txt
     $landisExitCode = $LASTEXITCODE
     Write-Output "LANDIS-II execution completed."
     cd $ProjectDir\src\
@@ -90,25 +90,6 @@ Write-Output "Video saved to: $LandisExecutionDir/quad_view.mp4"
 
 } else {
     Write-Output "Skipping video renders due to LANDIS-II non-zero exit code: $landisExitCode"
-}
-
-Write-Output "Creating filtered console output..."
-$consoleOutputPath = "$LandisExecutionDir\console-output.txt"
-$filteredOutputPath = "$LandisExecutionDir\console-output-filtered.txt"
-
-if (Test-Path $consoleOutputPath) {
-    Get-Content $consoleOutputPath | Where-Object { 
-        $_ -match "^Before disease progression" -or $_ -match "^\(inert\) Transitioned to dead" -or $_ -match "^Transitioned to dead" -or $_ -match "^Transferred" -or $_ -match "^After disease progression" -or $_ -match "^Current time" -or $_ -match "^Transitioning"
-    } | ForEach-Object {
-        if ($_ -match "^Adding new cohort:" -or $_ -match "^Transferring from") {
-            "    $_"
-        } else {
-            $_
-        }
-    } | Out-File -FilePath $filteredOutputPath -Encoding UTF8
-    Write-Output "Filtered console output saved to: $filteredOutputPath"
-} else {
-    Write-Output "console-output.txt not found. Skipping filtering."
 }
 
 cd $OriginalDir

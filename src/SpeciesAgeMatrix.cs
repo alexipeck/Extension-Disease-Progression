@@ -45,7 +45,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     if (youngestAge > 1) throw new InputValueException($"transition.data.{species.Name}", $"Configured to error on missing below range, lowest age must be 1.");
                     break;
                 case MissingBelowRangeMethod.Ignore:
-                    Console.WriteLine($"transition.data.{species.Name}: Configured to ignore missing below range.");
+                    Log.Info(LogType.General, $"transition.data.{species.Name}: Configured to ignore missing below range.");
                     //validation isn't needed, it will just ignore values below the threshold missing at runtime
                     break;
             }
@@ -94,7 +94,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
 						}
 					}
 					if (missingAgeRanges.Count > 0) {
-                        Console.WriteLine($"Performing linear interpolation to fill missing ranges {string.Join(", ", missingAgeRanges.Select(r => $"({r.Item1},{r.Item2})"))}");
+                        Log.Info(LogType.General, $"Performing linear interpolation to fill missing ranges {string.Join(", ", missingAgeRanges.Select(r => $"({r.Item1},{r.Item2})"))}");
                         foreach ((int leftAge, int rightAge) in missingAgeRanges) {
                             var leftValues = ageTransitionMatrix[(ushort)leftAge];
                             var rightValues = ageTransitionMatrix[(ushort)rightAge];
@@ -136,19 +136,19 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     if (oldestAge < species.Longevity - 1) throw new InputValueException($"transition.data.{species.Name}", $"Configured to error on data missing up to species longevity.");
                     break;
                 case MissingAboveRangeMethod.UseOldest:
-                    Console.WriteLine($"transition.data.{species.Name}: Configured to use oldest age data when missing above range.");
+                    Log.Info(LogType.General, $"transition.data.{species.Name}: Configured to use oldest age data when missing above range.");
                     break;
                 case MissingAboveRangeMethod.KillAll:
-                    Console.WriteLine($"transition.data.{species.Name}: Configured to kill of the cohort when missing above range.");
+                    Log.Info(LogType.General, $"transition.data.{species.Name}: Configured to kill of the cohort when missing above range.");
                     break;
                 case MissingAboveRangeMethod.Ignore:
-                    Console.WriteLine($"transition.data.{species.Name}: Configured to ignore missing above range.");
+                    Log.Info(LogType.General, $"transition.data.{species.Name}: Configured to ignore missing above range.");
                     break;
             }
             ////////
 
             //init
-            Console.WriteLine($"Initializing species age matrix for species: {species.Name}, designated healthy species: {designatedHealthySpecies.Name}");
+            Log.Info(LogType.General, $"Initializing species age matrix for species: {species.Name}, designated healthy species: {designatedHealthySpecies.Name}");
             _species = species;
             _designatedHealthySpecies = designatedHealthySpecies;
             _ageTransitionMatrix = ageTransitionMatrix;
@@ -160,7 +160,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             _exhaustiveProbability = exhaustiveProbability;
             _exhaustiveProbabilityTolerance = exhaustiveProbabilityTolerance;
             if (_exhaustiveProbability) {
-                Console.WriteLine($"Validating exhaustive probability for species {species.Name}");
+                Log.Info(LogType.General, $"Validating exhaustive probability for species {species.Name}");
                 foreach (var kvp in _ageTransitionMatrix) {
                     var arr = kvp.Value;
                     double sum = 0.0;

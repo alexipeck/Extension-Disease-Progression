@@ -66,11 +66,11 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 precomputedDispersalDistanceOffsets = precalculatedDispersalDistanceOffsetsList.ToArray();
                 //PlugIn.ModelCore.UI.WriteLine(string.Join(", ", precalculatedDispersalDistanceOffsets.Select(o => $"({o.x}, {o.y})")));
             }
-            PlugIn.ModelCore.UI.WriteLine($"Generating dispersal lookup matrix for {LandscapeDimensions.x}x{LandscapeDimensions.y} landscape");
+            Log.Info(LogType.General, $"Generating dispersal lookup matrix for {LandscapeDimensions.x}x{LandscapeDimensions.y} landscape");
             distanceDispersalDecayMatrixWidth = worstCaseMaximumDispersalCellDistance.x + 1;
             distanceDispersalDecayMatrixHeight = (int)(worstCaseMaximumDispersalCellDistance.x * 0.7071067812) + 1;
             indexOffsetDistanceDispersalDecayMatrix = GenerateDistanceDispersalDecayMatrix(parameters.DistanceDispersalDecayKernelFunction, PlugIn.ModelCore.CellLength, worstCaseMaximumDispersalCellDistance.x, parameters.DispersalMaxDistance);
-            PlugIn.ModelCore.UI.WriteLine("Generating dispersal probability matrix image");
+            Log.Info(LogType.General, "Generating dispersal probability matrix image");
             GenerateDistanceDispersalDecayMatrixImage(indexOffsetDistanceDispersalDecayMatrix);
             resproutRemaining = new Dictionary<(int siteIndex, ISpecies species), ushort>();
             //TODO: Add to input parameters
@@ -79,7 +79,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             IEnumerable<ActiveSite> sites = PlugIn.ModelCore.Landscape.ActiveSites;
             SHIMode = parameters.SHIMode;
             transmissionRate = parameters.TransmissionRate;
-            PlugIn.ModelCore.UI.WriteLine($"Finished generating dispersal lookup matrix for {LandscapeDimensions.x}x{LandscapeDimensions.y} landscape");
+            Log.Info(LogType.General, $"Finished generating dispersal lookup matrix for {LandscapeDimensions.x}x{LandscapeDimensions.y} landscape");
             {
                 //I needed a default that will make the program shit itself in some way if ever used
                 (int x, int y) UNSET = (x: int.MinValue, y: int.MinValue);
@@ -382,7 +382,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             Debug.Assert(cellLength > 0);
             //float cellArea = cellLength * cellLength;
             int dispersalProbabilityMatrixLength = distanceDispersalDecayMatrixWidth * distanceDispersalDecayMatrixHeight;
-            Console.WriteLine($"Max radius: {distanceDispersalDecayMatrixWidth}");
+            Log.Info(LogType.General, $"Max radius: {distanceDispersalDecayMatrixWidth}");
             double[] dispersalLookupMatrix = new double[dispersalProbabilityMatrixLength];
             int dispersalLookupMatrixCount = 0;
             for (int x = 0; x < distanceDispersalDecayMatrixWidth; x++) {
@@ -404,10 +404,10 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 }
             };
             //normalize
-            for (int x = 0; x < dispersalProbabilityMatrixLength; x++) {
+            /* for (int x = 0; x < dispersalProbabilityMatrixLength; x++) {
                 dispersalLookupMatrix[x] /= totalProbability;
-            }
-            Console.WriteLine($"Generated dispersal matrix with {dispersalLookupMatrixCount} entries");
+            } */
+            Log.Info(LogType.General, $"Generated dispersal matrix with {dispersalLookupMatrixCount} entries");
             
             return dispersalLookupMatrix;
         }
@@ -431,11 +431,11 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             int imageWidth = distanceDispersalDecayMatrixWidth * cellSize;
             int imageHeight = distanceDispersalDecayMatrixHeight * cellSize;
             if (imageWidth <= 0 || imageHeight <= 0 || imageWidth > MAX_IMAGE_SIZE || imageHeight > MAX_IMAGE_SIZE) {
-                Console.WriteLine($"Skipping image generation - invalid dimensions: {imageWidth}x{imageHeight}");
+                Log.Error(LogType.General, $"Skipping image generation - invalid dimensions: {imageWidth}x{imageHeight}");
                 return;
             }
-            Console.WriteLine($"Image dimensions: {imageWidth}x{imageHeight}");
-            Console.WriteLine($"Matrix dimensions: {distanceDispersalDecayMatrixWidth}x{distanceDispersalDecayMatrixHeight}");
+            Log.Info(LogType.General, $"Image dimensions: {imageWidth}x{imageHeight}");
+            Log.Info(LogType.General, $"Matrix dimensions: {distanceDispersalDecayMatrixWidth}x{distanceDispersalDecayMatrixHeight}");
             using (Bitmap bitmap = new Bitmap(imageWidth, imageHeight))
             using (Graphics graphics = Graphics.FromImage(bitmap))
             {
@@ -518,7 +518,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 scaleFactor--;
             }
             if (scaleFactor <= 0) {
-                Console.WriteLine($"Skipping infection image generation - site too large to generate image");
+                Log.Error(LogType.General, $"Skipping infection image generation - site too large to generate image");
                 return;
             }
             int imageWidth = landscapeDimensions.x * scaleFactor;
@@ -570,7 +570,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 scaleFactor--;
             }
             if (scaleFactor <= 0) {
-                Console.WriteLine($"Skipping intensity image generation - site too large to generate image");
+                Log.Error(LogType.General, $"Skipping intensity image generation - site too large to generate image");
                 return;
             }
             int imageWidth = landscapeDimensions.x * scaleFactor;
@@ -622,7 +622,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 scaleFactor--;
             }
             if (scaleFactor <= 4) {
-                Console.WriteLine($"Skipping state bitmap generation - site too large to generate image");
+                Log.Error(LogType.General, $"Skipping state bitmap generation - site too large to generate image");
                 return;
             }
             int imageWidth = landscapeDimensions.x * scaleFactor;
@@ -683,7 +683,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 scaleFactor--;
             }
             if (scaleFactor <= 4) {
-                Console.WriteLine($"Skipping state bitmap generation - site too large to generate image");
+                Log.Error(LogType.General, $"Skipping state bitmap generation - site too large to generate image");
                 return;
             }
             int imageWidth = landscapeDimensions.x * scaleFactor;
@@ -738,7 +738,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             return initialInfectionMap;
         }
 
-        public static void ProportionSites(IEnumerable<ActiveSite> sites, bool[] sitesForProportioning, int landscapeX, ExtensionType disturbanceType, bool debugOutputTransitions) {
+        public static void ProportionSites(IEnumerable<ActiveSite> sites, bool[] sitesForProportioning, int landscapeX, ExtensionType disturbanceType) {
             Dictionary<ISpecies, Dictionary<ushort, (int biomass, Dictionary<string, int> additionalParameters)>> newSiteCohortsDictionary = new Dictionary<ISpecies, Dictionary<ushort, (int biomass, Dictionary<string, int> additionalParameters)>>();
             foreach (ActiveSite site in sites) {
                 Location siteLocation = site.Location;
@@ -775,12 +775,10 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                         }
 
                         
-                        if (debugOutputTransitions) {
-                            if (designatedHealthySpecies != null) {
-                                PlugIn.ModelCore.UI.WriteLine($"designated healthy species: {designatedHealthySpecies.Name}");
-                            }
-                            PlugIn.ModelCore.UI.WriteLine($"species: {speciesCohorts.Species.Name}, age: {concreteCohort.Data.Age}, biomass: {concreteCohort.Data.Biomass}");
+                        if (designatedHealthySpecies != null) {
+                            Log.Info(LogType.General, $"designated healthy species: {designatedHealthySpecies.Name}");
                         }
+                        Log.Info(LogType.General, $"species: {speciesCohorts.Species.Name}, age: {concreteCohort.Data.Age}, biomass: {concreteCohort.Data.Biomass}");
 
                         //exists to account for the error created during the cast from float to int
                         //with low biomass values, the error accumilation can be significant
@@ -823,9 +821,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                                     }
                                     //TODO: Should I be feeding 1.0 for the proportion here so it kills the entire cohort in the case of where biomass == 1?
                                     Cohort.CohortMortality(concreteSpeciesCohorts, concreteCohort, site, disturbanceType, (float)proportion);
-                                    if (debugOutputTransitions) {
-                                        PlugIn.ModelCore.UI.WriteLine($"Transitioned to dead: Age: {concreteCohort.Data.Age}, Biomass: {concreteCohort.Data.Biomass}, Species: {speciesCohorts.Species.Name}");
-                                    }
+                                    Log.Info(LogType.Transitions, $"Transitioned to dead: Age: {concreteCohort.Data.Age}, Biomass: {concreteCohort.Data.Biomass}, Species: {speciesCohorts.Species.Name}");
                                     AddResproutLifetime(CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX), designatedHealthySpecies);
                                     continue; //short-circuit
                                 }
@@ -860,9 +856,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                                     newSiteCohortsDictionary[speciesCohorts.Species][concreteCohort.Data.Age] = (0, new Dictionary<string, int>());
                                 }
                                 newSiteCohortsDictionary[targetSpecies][concreteCohort.Data.Age] = entry;
-                                if (debugOutputTransitions) {
-                                    PlugIn.ModelCore.UI.WriteLine($"Transferred {transfer} biomass from {speciesCohorts.Species.Name} to {targetSpecies.Name}");
-                                }
+                                Log.Info(LogType.Transitions, $"Transferred {transfer} biomass from {speciesCohorts.Species.Name} to {targetSpecies.Name}");
                             }
                         }
                         //push remaining biomass to original species cohort

@@ -395,76 +395,61 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
 
             if (parameters.DistanceDispersalDecayKernelFunction == null) throw new InputValueException("dispersal.kernel", "Failed to construct kernel.");
 
-            PlugIn.ModelCore.UI.WriteLine("Configuration summary:");
-            PlugIn.ModelCore.UI.WriteLine($"  Timestep: {parameters.Timestep}");
-            PlugIn.ModelCore.UI.WriteLine($"  Transmission rate: {parameters.TransmissionRate}");
-            PlugIn.ModelCore.UI.WriteLine($"  Initial infection path: {(parameters.InitialInfectionPath ?? "<none>")}");
-            PlugIn.ModelCore.UI.WriteLine($"  Species host index: {speciesHostIndexPath}");
-            PlugIn.ModelCore.UI.WriteLine($"  Dispersal kernel: {parameters.DistanceDispersalDecayKernel}");
-            PlugIn.ModelCore.UI.WriteLine($"  Dispersal maximum distance: {parameters.DispersalMaxDistance}");
-            PlugIn.ModelCore.UI.WriteLine($"  SHI mode: {parameters.SHIMode}");
+            Log.Info(LogType.General, "Configuration summary:");
+            Log.Info(LogType.General, $"  Timestep: {parameters.Timestep}");
+            Log.Info(LogType.General, $"  Transmission rate: {parameters.TransmissionRate}");
+            Log.Info(LogType.General, $"  Initial infection path: {(parameters.InitialInfectionPath ?? "<none>")}");
+            Log.Info(LogType.General, $"  Species host index: {speciesHostIndexPath}");
+            Log.Info(LogType.General, $"  Dispersal kernel: {parameters.DistanceDispersalDecayKernel}");
+            Log.Info(LogType.General, $"  Dispersal maximum distance: {parameters.DispersalMaxDistance}");
+            Log.Info(LogType.General, $"  SHI mode: {parameters.SHIMode}");
             switch (parameters.DistanceDispersalDecayKernel) {
                 case DistanceDispersalDecayKernel.NegativeExponent:
                 case DistanceDispersalDecayKernel.PowerLaw:
-                    PlugIn.ModelCore.UI.WriteLine($"  Kernel: {parameters.DistanceDispersalDecayKernel}");
+                    Log.Info(LogType.General, $"  Kernel: {parameters.DistanceDispersalDecayKernel}");
                     break;
                 case DistanceDispersalDecayKernel.SingleAnchoredPowerLaw:
-                    PlugIn.ModelCore.UI.WriteLine($"  Kernel: {parameters.DistanceDispersalDecayKernel}");
+                    Log.Info(LogType.General, $"  Kernel: {parameters.DistanceDispersalDecayKernel}");
                     break;
                 case DistanceDispersalDecayKernel.DoubleAnchoredPowerLaw:
-                    PlugIn.ModelCore.UI.WriteLine($"  Kernel: {parameters.DistanceDispersalDecayKernel}");
+                    Log.Info(LogType.General, $"  Kernel: {parameters.DistanceDispersalDecayKernel}");
                     break;
             }
 
-            PlugIn.ModelCore.UI.WriteLine("Transition configuration:");
-            PlugIn.ModelCore.UI.WriteLine($"  Exhaustive probability: {exhaustiveProbability}");
-            PlugIn.ModelCore.UI.WriteLine($"  Exhaustive probability tolerance: {exhaustiveProbabilityTolerance}");
-            PlugIn.ModelCore.UI.WriteLine("  Groups:");
+            Log.Info(LogType.General, "Transition configuration:");
+            Log.Info(LogType.General, $"  Exhaustive probability: {exhaustiveProbability}");
+            Log.Info(LogType.General, $"  Exhaustive probability tolerance: {exhaustiveProbabilityTolerance}");
+            Log.Info(LogType.General, "  Groups:");
             foreach (var g in groupHealthy.Keys) {
-                PlugIn.ModelCore.UI.WriteLine($"    {g}: healthy={groupHealthy[g].Name}, infected=[{string.Join(", ", groupInfected[g].Select(s => s.Name))}]");
+                Log.Info(LogType.General, $"    {g}: healthy={groupHealthy[g].Name}, infected=[{string.Join(", ", groupInfected[g].Select(s => s.Name))}]");
             }
-            PlugIn.ModelCore.UI.WriteLine("  Designated healthy species:");
-            foreach (var hs in parameters.DesignatedHealthySpecies) PlugIn.ModelCore.UI.WriteLine($"    {hs.Name}");
-            PlugIn.ModelCore.UI.WriteLine("  Infected species:");
-            foreach (var isx in parameters.InfectedSpeciesLookup) PlugIn.ModelCore.UI.WriteLine($"    {isx.Name}");
-            PlugIn.ModelCore.UI.WriteLine("  Species age transition matrices:");
+            Log.Info(LogType.General, "  Designated healthy species:");
+            foreach (var hs in parameters.DesignatedHealthySpecies) Log.Info(LogType.General, $"    {hs.Name}");
+            Log.Info(LogType.General, "  Infected species:");
+            foreach (var isx in parameters.InfectedSpeciesLookup) Log.Info(LogType.General, $"    {isx.Name}");
+            Log.Info(LogType.General, "  Species age transition matrices:");
             foreach (var kvp in parameters.SpeciesTransitionAgeMatrix) {
                 var sp = kvp.Key;
                 var mat = kvp.Value;
-                PlugIn.ModelCore.UI.WriteLine($"    source={sp.Name}, healthy={mat.DesignatedHealthySpecies().Name}");
+                Log.Info(LogType.General, $"    source={sp.Name}, healthy={mat.DesignatedHealthySpecies().Name}");
             }
 
-            foreach (var kvp in parameters.SpeciesTransitionAgeMatrix) {
-                var sp = kvp.Key;
-                var mat = kvp.Value;
-                var dict = (Dictionary<ushort, (ISpecies, double)[]>)kvp.Value.GetType().GetField("_ageTransitionMatrix", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(kvp.Value);
-                var ages = new List<ushort>(dict.Keys);
-                ages.Sort();
-                foreach (ushort age in ages) {
-                    var dist = dict[age];
-                    var parts = new List<string>();
-                    foreach (var t in dist)
-                    {
-                        parts.Add($"{(t.Item1 == null ? "DEAD" : t.Item1.Name)}={t.Item2}");
-                    }
-                    PlugIn.ModelCore.UI.WriteLine($"      species: {sp.Name}, age {age}: {string.Join(", ", parts)}");
-                }
-            }
+            
 
-            PlugIn.ModelCore.UI.WriteLine("  Softmax inputs:");
+            Log.Info(LogType.General, "  Softmax inputs:");
             foreach (var srcEntry in parameters.SpeciesSoftmaxInputs) {
 				var sp = srcEntry.Key;
 				var ageMap = srcEntry.Value;
 				var ages = new List<ushort>(ageMap.Keys);
 				ages.Sort();
-                PlugIn.ModelCore.UI.WriteLine($"    source={sp.Name}:");
+                Log.Info(LogType.General, $"    source={sp.Name}:");
 				foreach (ushort age in ages) {
 					var targetMap = ageMap[age];
-                    PlugIn.ModelCore.UI.WriteLine($"      age {age}:");
+                    Log.Info(LogType.General, $"      age {age}:");
                     foreach (var kv in targetMap) {
                         var targetSpecies = kv.Item1;
                         var coeff = kv.Item2;
-                        PlugIn.ModelCore.UI.WriteLine($"        target={(targetSpecies == null ? "DEAD" : targetSpecies.Name)}: b0={coeff.B0}, b1={coeff.B1}, dbh={coeff.DBH}, b2={coeff.B2}");
+                        Log.Info(LogType.General, $"        target={(targetSpecies == null ? "DEAD" : targetSpecies.Name)}: b0={coeff.B0}, b1={coeff.B1}, dbh={coeff.DBH}, b2={coeff.B2}");
                     }
 				}
             }
