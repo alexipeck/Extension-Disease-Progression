@@ -404,9 +404,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 }
             };
             //normalize
-            /* for (int x = 0; x < dispersalProbabilityMatrixLength; x++) {
+            for (int x = 0; x < dispersalProbabilityMatrixLength; x++) {
                 dispersalLookupMatrix[x] /= totalProbability;
-            } */
+            }
             Log.Info(LogType.General, $"Generated dispersal matrix with {dispersalLookupMatrixCount} entries");
             
             return dispersalLookupMatrix;

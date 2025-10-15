@@ -79,7 +79,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
             Timestep = parameters.Timestep;
             
-            string[] pathsToEmpty = new string[] { "./infection_timeline", "./shi_timeline", "./shim_timeline", "./shim_normalized_timeline", "./foi_timeline", "./foi_colourised_timeline", "./infection_timeline_multi", "./overall_timeline" };
+            string[] pathsToEmpty = new string[] { "./images/infection_timeline", "./images/shi_timeline", "./images/shim_timeline", "./images/shim_normalized_timeline", "./images/foi_timeline", "./images/foi_colourised_timeline", "./images/infection_timeline_multi", "./images/overall_timeline" };
             foreach (string path in pathsToEmpty) {
                 if (System.IO.Directory.Exists(path)) {
                     System.IO.DirectoryInfo directory = new System.IO.DirectoryInfo(path);
@@ -206,7 +206,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
             Log.Info(LogType.General, $"Finished calculating SHI & SHIM: {stopwatch.ElapsedMilliseconds} ms");
             stopwatch.Reset();
-            ExportNumericalBitmap(SHIM, "./shim_timeline/shim_state", "SHIM");
+            ExportNumericalBitmap(SHIM, "./images/shim_timeline/shim_state", "SHIM");
             
             stopwatch.Start();
             //double SHIMMean = SHIMSum / ModelCore.Landscape.ActiveSiteCount;
@@ -233,13 +233,13 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
             Log.Info(LogType.General, $"Finished normalizing SHIM: {stopwatch.ElapsedMilliseconds} ms");
             stopwatch.Reset();
-            ExportNumericalBitmap(SHIM, "./shim_normalized_timeline/shim_normalized_state", "SHI Normalized");
+            ExportNumericalBitmap(SHIM, "./images/shim_normalized_timeline/shim_normalized_state", "SHI Normalized");
 
             stopwatch.Start();
             double[] FOI = CalculateForceOfInfection(landscapeSize, SHIM);
             Log.Info(LogType.General, $"Finished calculating FOI: {stopwatch.ElapsedMilliseconds} ms");
             stopwatch.Reset();
-            ExportNumericalBitmap(FOI, "./foi_timeline/foi_state", "FOI");
+            ExportNumericalBitmap(FOI, "./images/foi_timeline/foi_state", "FOI");
             double[] FOIScaled = new double[landscapeSize];
             (double FOImin, double FOImax) = MinMaxActive(FOI);
             double range = FOImax - FOImin;
@@ -256,7 +256,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             /* for (int i = 0; i < landscapeSize; i++) {
                 FOIScaled[i] = FOI[i];
             } */
-            ExportIntensityBitmap(FOIScaled, "./foi_colourised_timeline/foi_colourised_state", "FOI Colourised");
+            ExportIntensityBitmap(FOIScaled, "./images/foi_colourised_timeline/foi_colourised_state", "FOI Colourised");
 
             stopwatch.Start();
             foreach (int healthySiteIndex in healthySitesListIndices) {
@@ -407,7 +407,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 Task.Run(() => {
                     
                     try {
-                        string outputPath = $"./infection_timeline_multi/infection_multi_state_{modelCore.CurrentTime}.png";
+                        string outputPath = $"./images/infection_timeline_multi/infection_multi_state_{modelCore.CurrentTime}.png";
                         GenerateMultiStateBitmap(outputPath, colors);
                     }
                     catch (Exception ex) {
@@ -425,7 +425,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 Task.Run(() => {
                     
                     try {
-                        string outputPath = $"./overall_timeline/overall_state_{modelCore.CurrentTime}.png";
+                        string outputPath = $"./images/overall_timeline/overall_state_{modelCore.CurrentTime}.png";
                         GenerateOverallStateBitmap(outputPath, colors);
                     }
                     catch (Exception ex) {
@@ -447,7 +447,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     Stopwatch outputStopwatch = new Stopwatch();
                     outputStopwatch.Start();
                     try {
-                        string outputPath = $"./infection_timeline/infection_state_{modelCore.CurrentTime}.png";
+                        string outputPath = $"./images/infection_timeline/infection_state_{modelCore.CurrentTime}.png";
                         GenerateInfectionStateBitmap(outputPath, healthySitesList, infectedSitesList, ignoredSitesList);
                     }
                     catch (Exception ex) {
