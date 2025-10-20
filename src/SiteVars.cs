@@ -467,6 +467,86 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
         }
 
+        public static void SerializeAsBincode(string outputPath, int timestep, double[] data) {
+            int width = landscapeDimensions.x;
+            int height = landscapeDimensions.y;
+            ulong count = (ulong)((long)width * (long)height);
+            if (data == null) throw new ArgumentNullException(nameof(data));
+            if ((ulong)data.LongLength != count) throw new ArgumentException("Data length does not match width*height.");
+            string dir = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+            using (FileStream fs = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (BinaryWriter writer = new BinaryWriter(fs)) {
+                writer.Write((uint)timestep);
+                writer.Write((uint)width);
+                writer.Write((uint)height);
+                writer.Write(count);
+                for (long i = 0; i < data.LongLength; i++) {
+                    writer.Write(data[i]);
+                }
+            }
+        }
+
+        public static void SerializeAsBincode(string outputPath, int timestep, List<(int x, int y)> healthySitesList, List<(int x, int y)> infectedSitesList, List<(int x, int y)> ignoredSitesList) {
+            int width = landscapeDimensions.x;
+            int height = landscapeDimensions.y;
+            if (healthySitesList == null) throw new ArgumentNullException(nameof(healthySitesList));
+            if (infectedSitesList == null) throw new ArgumentNullException(nameof(infectedSitesList));
+            if (ignoredSitesList == null) throw new ArgumentNullException(nameof(ignoredSitesList));
+            string dir = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+            using (FileStream fs = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (BinaryWriter writer = new BinaryWriter(fs))
+            {
+                writer.Write((uint)timestep);
+                writer.Write((uint)width);
+                writer.Write((uint)height);
+                writer.Write((ulong)healthySitesList.Count);
+                for (int i = 0; i < healthySitesList.Count; i++) {
+                    int x = healthySitesList[i].x;
+                    int y = healthySitesList[i].y;
+                    if (x < 0 || y < 0) throw new ArgumentOutOfRangeException("Coordinates must be non-negative.");
+                    writer.Write((uint)x);
+                    writer.Write((uint)y);
+                }
+                writer.Write((ulong)infectedSitesList.Count);
+                for (int i = 0; i < infectedSitesList.Count; i++) {
+                    int x = infectedSitesList[i].x;
+                    int y = infectedSitesList[i].y;
+                    if (x < 0 || y < 0) throw new ArgumentOutOfRangeException("Coordinates must be non-negative.");
+                    writer.Write((uint)x);
+                    writer.Write((uint)y);
+                }
+                writer.Write((ulong)ignoredSitesList.Count);
+                for (int i = 0; i < ignoredSitesList.Count; i++) {
+                    int x = ignoredSitesList[i].x;
+                    int y = ignoredSitesList[i].y;
+                    if (x < 0 || y < 0) throw new ArgumentOutOfRangeException("Coordinates must be non-negative.");
+                    writer.Write((uint)x);
+                    writer.Write((uint)y);
+                }
+            }
+        }
+
+        public static void GenerateBitmap(string outputPath, byte[] data) {
+            int width = landscapeDimensions.x;
+            int height = landscapeDimensions.y;
+            ulong count = (ulong)((long)width * (long)height);
+            if (data == null) throw new ArgumentNullException(nameof(data));
+            if ((ulong)data.LongLength != count) throw new ArgumentException("Data length does not match width*height.");
+            string dir = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+            using (FileStream fs = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (BinaryWriter writer = new BinaryWriter(fs)) {
+                writer.Write((uint)width);
+                writer.Write((uint)height);
+                writer.Write(count);
+                for (long i = 0; i < data.LongLength; i++) {
+                    writer.Write(data[i]);
+                }
+            }
+        }
+
         public static void GenerateNumericalStateBitmap(string outputPath, double[] SHI) {
             byte scaleFactor = 120;
             while (scaleFactor * landscapeDimensions.x > MAX_IMAGE_SIZE || scaleFactor * landscapeDimensions.y > MAX_IMAGE_SIZE) {

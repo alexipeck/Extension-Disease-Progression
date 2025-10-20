@@ -79,7 +79,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
             Timestep = parameters.Timestep;
             
-            string[] pathsToEmpty = new string[] { "./images/infection_timeline", "./images/shi_timeline", "./images/shim_timeline", "./images/shim_normalized_timeline", "./images/foi_timeline", "./images/foi_colourised_timeline", "./images/infection_timeline_multi", "./images/overall_timeline" };
+            string[] pathsToEmpty = new string[] { "./images", "./data"};
             foreach (string path in pathsToEmpty) {
                 if (System.IO.Directory.Exists(path)) {
                     System.IO.DirectoryInfo directory = new System.IO.DirectoryInfo(path);
@@ -240,6 +240,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             Log.Info(LogType.General, $"Finished calculating FOI: {stopwatch.ElapsedMilliseconds} ms");
             stopwatch.Reset();
             ExportNumericalBitmap(FOI, "./images/foi_timeline/foi_state", "FOI");
+            ExportData(FOI, "./data/foi/", "FOI_data");
             double[] FOIScaled = new double[landscapeSize];
             (double FOImin, double FOImax) = MinMaxActive(FOI);
             double range = FOImax - FOImin;
@@ -434,6 +435,23 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     }
                     outputStopwatch.Stop();
                     Log.Info(LogType.General, $"      Finished outputting overall state: {outputStopwatch.ElapsedMilliseconds} ms");
+                });
+            }
+
+            {
+                Task.Run(() => {
+                    Stopwatch outputStopwatch = new Stopwatch();
+                    outputStopwatch.Start();
+                    try {
+                        string outputPath = $"./data/infection/{modelCore.CurrentTime}.bin";
+                        SerializeAsBincode(outputPath, modelCore.CurrentTime, healthySitesList, infectedSitesList, ignoredSitesList);
+                    }
+                    catch (Exception ex) {
+                        Log.Error(LogType.General, $"Debug bitmap generation failed: {ex.Message}");
+                        throw;
+                    }
+                    outputStopwatch.Stop();
+                    Log.Info(LogType.General, $"      Finished outputting infection state: {outputStopwatch.ElapsedMilliseconds} ms");
                 });
             }
 

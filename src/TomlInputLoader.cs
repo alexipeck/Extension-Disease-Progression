@@ -87,6 +87,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
 
             var speciesNameToISpecies = new Dictionary<string, ISpecies>(StringComparer.OrdinalIgnoreCase);
             foreach (var species in PlugIn.ModelCore.Species) speciesNameToISpecies[species.Name] = species;
+
+            
             speciesNameToISpecies["DEAD"] = null;
 
             var speciesHostIndex = new Dictionary<ISpecies, HostIndex>();

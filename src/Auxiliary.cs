@@ -130,6 +130,24 @@ namespace Landis.Extension.Disturbance.DiseaseProgression {
 			}
 			return new string(buf);
         }
+        public static void ExportData(double[] data, string directory, string label) {
+            double[] dataCopy = new double[data.Length];
+            Array.Copy(data, dataCopy, data.Length);
+            Task.Run(() => {
+                Stopwatch outputStopwatch = new Stopwatch();
+                outputStopwatch.Start();
+                try {
+                    string outputPath = $"{directory}/{PlugIn.ModelCore.CurrentTime}.bin";
+                    SiteVars.SerializeAsBincode(outputPath, PlugIn.ModelCore.CurrentTime, dataCopy);
+                }
+                catch (Exception ex) {
+                    Log.Error(LogType.General, $"Debug bitmap generation failed: {ex.Message}");
+                    throw;
+                }
+                outputStopwatch.Stop();
+                Log.Info(LogType.General, $"      Finished outputting {label} state: {outputStopwatch.ElapsedMilliseconds} ms");
+            });
+        }
         public static void DumpSiteInformation(IEnumerable<ActiveSite> sites) {
             foreach (ActiveSite site in sites) {
                 foreach (ISpeciesCohorts speciesCohorts in SiteVars.Cohorts[site]) {
@@ -139,6 +157,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression {
                 }
             }
         }
+        //assumes disease progression only (regression not implemented)
         //does not currently take into account the timestep
         public static Dictionary<ISpecies, Dictionary<ushort, (ISpecies, double)[]>> PrecalculateSpeciesDistributionTransitions(Dictionary<ISpecies, Dictionary<ushort, List<(ISpecies, SoftmaxInputs)>>> speciesSoftmaxParameters) {
             Dictionary<ISpecies, Dictionary<ushort, (ISpecies, double)[]>> exponentialLinearPredictors = new Dictionary<ISpecies, Dictionary<ushort, (ISpecies, double)[]>>();
@@ -206,25 +225,11 @@ namespace Landis.Extension.Disturbance.DiseaseProgression {
                     }
                 }
             }
-            //maybe take input as (ISpecies, ISpecies[])[] speciesGroups to denote the healthy species and the progressions
-            //need to take input of the max age for each species/pseudo-species group
-            /* species groups {
-
-            }
-            species {
-                age {
-                    species it can transition to {
-                        storage[species][age][transition_list]
-                    }
-                }
-            } */
-            
-            //process all coefficients into exponentialLinearPredictors
 
             return transitionsArray;
         }
         //assumes disease progression only (regression not implemented)
-        public static (ISpecies, double)[] T(ISpecies startingSpecies, (ISpecies, double)[] coefficients) {
+        /* public static (ISpecies, double)[] T(ISpecies startingSpecies, (ISpecies, double)[] coefficients) {
             //not sure how to input yet
             //dbh at the start of the timestep (likely something to do with age and biomass?)
             double dbh_cm = 20.0;
@@ -259,6 +264,6 @@ namespace Landis.Extension.Disturbance.DiseaseProgression {
             Trace.Assert(healthyExponentialLinearPredictor != double.NegativeInfinity, "Healthy exponential linear predictor not found");
             //1 is actualle e^0
             return outputTransitions;
-        }
+        } */
     }
 }
