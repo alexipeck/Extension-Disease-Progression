@@ -11,7 +11,8 @@ public enum LogType
 {
     Transitions,
     Timing,
-    General
+    General,
+    Debug
 }
 
 public static class Log

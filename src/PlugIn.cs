@@ -83,7 +83,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             foreach (string path in pathsToEmpty) {
                 if (System.IO.Directory.Exists(path)) {
                     System.IO.DirectoryInfo directory = new System.IO.DirectoryInfo(path);
-                    foreach (System.IO.FileInfo file in directory.GetFiles()) {
+                    foreach (System.IO.FileInfo file in directory.GetFiles("*", System.IO.SearchOption.AllDirectories)) {
                         file.Delete();
                     }
                     Log.Info(LogType.General, $"Emptied folder: {path}");
@@ -101,7 +101,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                         }
                         index++;
                     }
-                    ProportionSites(ModelCore.Landscape.ActiveSites, initialInfectionMap, LandscapeDimensions.x, type);
+                    ProportionSites(ModelCore.Landscape.ActiveSites, initialInfectionMap, LandscapeDimensions.x, type, LandscapeDimensions.x * LandscapeDimensions.y);
                 }
                 Log.Info(LogType.General, "Finished applying initial infection map");
             }
@@ -112,7 +112,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         //---------------------------------------------------------------------
         public override void Run()
         {
-            //DumpSiteInformation(ModelCore.Landscape.ActiveSites);
+            DumpSiteInformation(ModelCore.Landscape.ActiveSites);
             Log.Info(LogType.General, "Running disease progression");
             //////// DEBUG PARAMETERS
             //bool debugOutputTransitions = false;
@@ -272,7 +272,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             ///////////////////
             
             stopwatch.Start();
-            ProportionSites(sites, sitesForProportioning, landscapeX, type);
+            ProportionSites(sites, sitesForProportioning, landscapeX, type, landscapeSize);
             Log.Info(LogType.General, $"Finished proportioning and rewriting SiteCohorts for all sites: {stopwatch.ElapsedMilliseconds} ms");
             stopwatch.Reset();
             globalTimer.Stop();
