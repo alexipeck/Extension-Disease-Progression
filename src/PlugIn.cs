@@ -349,6 +349,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                         List<int> ignoredSitesListIndices) 
         InfectionStateDetection(IEnumerable<ActiveSite> sites, IInputParameters parameters, int landscapeX, int landscapeSize) {
             bool[] sitesForProportioning = new bool[landscapeSize];
+            ulong[] healthyBiomassTracker = new ulong[landscapeSize];
+            ulong[] infectedBiomassTracker = new ulong[landscapeSize];
+            ulong[] ignoredBiomassTracker = new ulong[landscapeSize];
             List<(int x, int y)> healthySitesList = new List<(int x, int y)>();
             List<(int x, int y)> infectedSitesList = new List<(int x, int y)>();
             List<(int x, int y)> ignoredSitesList = new List<(int x, int y)>();
@@ -400,6 +403,12 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     ignoredSitesList.Add((siteLocation.Column, siteLocation.Row));
                     ignoredSitesListIndices.Add(index);
                 }
+                if (healthyBiomass < 0 || infectedBiomass < 0 || ignoredBiomass < 0) {
+                    throw new ArgumentException($"Negative biomass detected: healthy={healthyBiomass}, infected={infectedBiomass}, ignored={ignoredBiomass}");
+                }
+                healthyBiomassTracker[index] = (ulong)healthyBiomass;
+                infectedBiomassTracker[index] = (ulong)infectedBiomass;
+                ignoredBiomassTracker[index] = (ulong)ignoredBiomass;
             }
 
             {
@@ -444,7 +453,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     outputStopwatch.Start();
                     try {
                         string outputPath = $"./data/infection/{modelCore.CurrentTime}.bin";
-                        SerializeAsBincode(outputPath, modelCore.CurrentTime, healthySitesList, infectedSitesList, ignoredSitesList);
+                        SerializeAsBincode(outputPath, modelCore.CurrentTime, healthySitesList, infectedSitesList, ignoredSitesList, healthyBiomassTracker, infectedBiomassTracker, ignoredBiomassTracker);
                     }
                     catch (Exception ex) {
                         Log.Error(LogType.General, $"Debug bitmap generation failed: {ex.Message}");

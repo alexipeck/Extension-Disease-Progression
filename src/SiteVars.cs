@@ -507,12 +507,19 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
         }
 
-        public static void SerializeAsBincode(string outputPath, int timestep, List<(int x, int y)> healthySitesList, List<(int x, int y)> infectedSitesList, List<(int x, int y)> ignoredSitesList) {
+        public static void SerializeAsBincode(string outputPath, int timestep, List<(int x, int y)> healthySitesList, List<(int x, int y)> infectedSitesList, List<(int x, int y)> ignoredSitesList, ulong[] healthyBiomassTracker, ulong[] infectedBiomassTracker, ulong[] ignoredBiomassTracker) {
             int width = landscapeDimensions.x;
             int height = landscapeDimensions.y;
+            int expectedLength = width * height;
             if (healthySitesList == null) throw new ArgumentNullException(nameof(healthySitesList));
             if (infectedSitesList == null) throw new ArgumentNullException(nameof(infectedSitesList));
             if (ignoredSitesList == null) throw new ArgumentNullException(nameof(ignoredSitesList));
+            if (healthyBiomassTracker == null) throw new ArgumentNullException(nameof(healthyBiomassTracker));
+            if (infectedBiomassTracker == null) throw new ArgumentNullException(nameof(infectedBiomassTracker));
+            if (ignoredBiomassTracker == null) throw new ArgumentNullException(nameof(ignoredBiomassTracker));
+            if (healthyBiomassTracker.Length != expectedLength) throw new ArgumentException($"HealthyBiomassTracker length {healthyBiomassTracker.Length} does not match expected length {expectedLength} (width * height).");
+            if (infectedBiomassTracker.Length != expectedLength) throw new ArgumentException($"InfectedBiomassTracker length {infectedBiomassTracker.Length} does not match expected length {expectedLength} (width * height).");
+            if (ignoredBiomassTracker.Length != expectedLength) throw new ArgumentException($"IgnoredBiomassTracker length {ignoredBiomassTracker.Length} does not match expected length {expectedLength} (width * height).");
             string dir = Path.GetDirectoryName(outputPath);
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
             using (FileStream fs = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.None))
@@ -544,6 +551,18 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     if (x < 0 || y < 0) throw new ArgumentOutOfRangeException("Coordinates must be non-negative.");
                     writer.Write((uint)x);
                     writer.Write((uint)y);
+                }
+                writer.Write((ulong)healthyBiomassTracker.Length);
+                for (int i = 0; i < healthyBiomassTracker.Length; i++) {
+                    writer.Write(healthyBiomassTracker[i]);
+                }
+                writer.Write((ulong)infectedBiomassTracker.Length);
+                for (int i = 0; i < infectedBiomassTracker.Length; i++) {
+                    writer.Write(infectedBiomassTracker[i]);
+                }
+                writer.Write((ulong)ignoredBiomassTracker.Length);
+                for (int i = 0; i < ignoredBiomassTracker.Length; i++) {
+                    writer.Write(ignoredBiomassTracker[i]);
                 }
             }
         }
