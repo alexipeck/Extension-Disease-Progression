@@ -307,7 +307,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             double[] infectedProbabilityNew = new double[landscapeSize];
             double[] diseasedProbabilityNew = new double[landscapeSize];
             Parallel.ForEach(activeSiteIndices, i => {
-                double beta_t = normalizedWeatherIndex[i] * transmissionRate;
+                double beta_t = 1/* normalizedWeatherIndex[i] */ * transmissionRate;
                 double sum = 0.0;
                 (int x, int y) targetCoordinates = precomputedLandscapeCoordinates[i];
                 foreach ((int x, int y) in precomputedDispersalDistanceOffsets) {
@@ -327,9 +327,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                         * (infectedProbability[j] + diseasedProbability[j])
                         * decay;
                 }
-                FOI[i] = 
-                    /* Transmission & Weather Index * */
-                    sum;
+                FOI[i] = beta_t * sum;
                 /* Trace.Assert(
                     susceptibleProbability[i] + infectedProbability[i] + diseasedProbability[i] == 1.0,
                     $"SusceptibleProbability: {susceptibleProbability[i]}, InfectedProbability: {infectedProbability[i]}, DiseasedProbability: {diseasedProbability[i]}, total: {susceptibleProbability[i] + infectedProbability[i] + diseasedProbability[i]}"
