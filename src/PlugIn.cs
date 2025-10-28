@@ -349,9 +349,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                         List<int> ignoredSitesListIndices) 
         InfectionStateDetection(IEnumerable<ActiveSite> sites, IInputParameters parameters, int landscapeX, int landscapeSize) {
             bool[] sitesForProportioning = new bool[landscapeSize];
-            ulong[] healthyBiomassTracker = new ulong[landscapeSize];
-            ulong[] infectedBiomassTracker = new ulong[landscapeSize];
-            ulong[] ignoredBiomassTracker = new ulong[landscapeSize];
+            (ulong infected, ulong healthy, ulong ignored)[] biomass = new (ulong infected, ulong healthy, ulong ignored)[landscapeSize];
             List<(int x, int y)> healthySitesList = new List<(int x, int y)>();
             List<(int x, int y)> infectedSitesList = new List<(int x, int y)>();
             List<(int x, int y)> ignoredSitesList = new List<(int x, int y)>();
@@ -360,9 +358,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             List<int> ignoredSitesListIndices = new List<int>();
             Color[] colors = new Color[landscapeSize];
             foreach (ActiveSite site in sites) {
-                int healthyBiomass = 0;
-                int infectedBiomass = 0;
-                int ignoredBiomass = 0;
+                ulong healthyBiomass = 0;
+                ulong infectedBiomass = 0;
+                ulong ignoredBiomass = 0;
                 bool containsHealthySpecies = false;
                 bool containsInfectedSpecies = false;
                 foreach (ISpeciesCohorts speciesCohorts in SiteVars.Cohorts[site]) {
@@ -371,20 +369,23 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     if (designatedHealthySpecies != null && speciesCohorts.Species == designatedHealthySpecies) {
                         containsHealthySpecies = true;
                         foreach (ICohort cohort in speciesCohorts) {
-                            healthyBiomass += cohort.Data.Biomass;
+                            if (cohort.Data.Biomass < 0) throw new ArgumentException($"Negative biomass detected: {cohort.Data.Biomass}");
+                            healthyBiomass += (ulong)cohort.Data.Biomass;
                         }
                     } else if (designatedHealthySpecies != null && parameters.TransitionMatrixContainsSpecies(speciesCohorts.Species)) {
                         containsInfectedSpecies = true;
                         foreach (ICohort cohort in speciesCohorts) {
-                            infectedBiomass += cohort.Data.Biomass;
+                            if (cohort.Data.Biomass < 0) throw new ArgumentException($"Negative biomass detected: {cohort.Data.Biomass}");
+                            infectedBiomass += (ulong)cohort.Data.Biomass;
                         }
                     } else {
                         foreach (ICohort cohort in speciesCohorts) {
-                            ignoredBiomass += cohort.Data.Biomass;
+                            if (cohort.Data.Biomass < 0) throw new ArgumentException($"Negative biomass detected: {cohort.Data.Biomass}");
+                            ignoredBiomass += (ulong)cohort.Data.Biomass;
                         }
                     }
                 }
-                int totalBiomass = healthyBiomass + infectedBiomass + ignoredBiomass;
+                ulong totalBiomass = healthyBiomass + infectedBiomass + ignoredBiomass;
                 byte redIntensity = (byte)Math.Round(((double)infectedBiomass / (double)totalBiomass) * 255.0);
                 byte greenIntensity = (byte)Math.Round(((double)healthyBiomass / (double)totalBiomass) * 255.0);
                 byte blueIntensity = (byte)Math.Round(((double)ignoredBiomass / (double)totalBiomass) * 255.0);
@@ -406,9 +407,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 if (healthyBiomass < 0 || infectedBiomass < 0 || ignoredBiomass < 0) {
                     throw new ArgumentException($"Negative biomass detected: healthy={healthyBiomass}, infected={infectedBiomass}, ignored={ignoredBiomass}");
                 }
-                healthyBiomassTracker[index] = (ulong)healthyBiomass;
-                infectedBiomassTracker[index] = (ulong)infectedBiomass;
-                ignoredBiomassTracker[index] = (ulong)ignoredBiomass;
+                biomass[index] = (infectedBiomass, healthyBiomass, ignoredBiomass);
             }
 
             {
@@ -453,7 +452,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     outputStopwatch.Start();
                     try {
                         string outputPath = $"./data/infection/{modelCore.CurrentTime}.bin";
-                        SerializeAsBincode(outputPath, modelCore.CurrentTime, healthySitesList, infectedSitesList, ignoredSitesList, healthyBiomassTracker, infectedBiomassTracker, ignoredBiomassTracker);
+                        SerializeAsBincode(outputPath, modelCore.CurrentTime, healthySitesList, infectedSitesList, ignoredSitesList);
                     }
                     catch (Exception ex) {
                         Log.Error(LogType.General, $"Debug bitmap generation failed: {ex.Message}");
@@ -461,6 +460,22 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     }
                     outputStopwatch.Stop();
                     Log.Info(LogType.General, $"      Finished outputting infection state: {outputStopwatch.ElapsedMilliseconds} ms");
+                });
+            }
+
+            {
+                Task.Run(() => {
+                    Stopwatch outputStopwatch = new Stopwatch();
+                    outputStopwatch.Start();
+                    try {
+                        SerializeAsBincode($"./data/biomass/{modelCore.CurrentTime}.bin", modelCore.CurrentTime, biomass);
+                    }
+                    catch (Exception ex) {
+                        Log.Error(LogType.General, $"Biomass bincode output failed: {ex.Message}");
+                        throw;
+                    }
+                    outputStopwatch.Stop();
+                    Log.Info(LogType.General, $"      Finished outputting biomass state: {outputStopwatch.ElapsedMilliseconds} ms");
                 });
             }
 
