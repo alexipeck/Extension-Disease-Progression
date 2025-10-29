@@ -112,7 +112,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         //---------------------------------------------------------------------
         public override void Run()
         {
-            DumpSiteInformation(ModelCore.Landscape.ActiveSites);
+            //DumpSiteInformation(ModelCore.Landscape.ActiveSites);
             Log.Info(LogType.General, "Running disease progression");
             //////// DEBUG PARAMETERS
             //bool debugOutputTransitions = false;
@@ -364,6 +364,12 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 bool containsHealthySpecies = false;
                 bool containsInfectedSpecies = false;
                 foreach (ISpeciesCohorts speciesCohorts in SiteVars.Cohorts[site]) {
+                    foreach (ICohort cohort in speciesCohorts) {
+                        if (cohort.Data.Age == 1) {
+                            Log.Age1CSV(ModelCore.CurrentTime, cohort.Species.Name, cohort.Data.Age);
+                        }
+                        Log.StateCSV(ModelCore.CurrentTime, cohort.Species.Name, cohort.Data.Age);
+                    }
                     ISpecies designatedHealthySpecies = parameters.GetDesignatedHealthySpecies(speciesCohorts.Species);
                     //Console.WriteLine($"Looking at species: {speciesCohorts.Species.Name}{(designatedHealthySpecies != null ? $", it's designated healthy species is: {designatedHealthySpecies.Name}" : "")}");
                     if (designatedHealthySpecies != null && speciesCohorts.Species == designatedHealthySpecies) {
