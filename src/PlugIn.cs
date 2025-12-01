@@ -170,7 +170,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             (bool[] sitesForProportioning,
              List<int> healthySitesListIndices,
              List<int> infectedSitesListIndices,
-             List<int> ignoredSitesListIndices) = 
+             List<int> ignoredSitesListIndices,
+             byte[] regenerationOccurred) = 
                 InfectionStateDetection(sites, parameters, landscapeX, landscapeSize);
             byte[] infectionOccurred = new byte[landscapeSize];
             Log.Info(LogType.General, $"Finished infection state detection: {stopwatch.ElapsedMilliseconds} ms");
@@ -277,6 +278,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             ProportionSites(sites, sitesForProportioning, landscapeX, type, landscapeSize);
             Log.Info(LogType.General, $"Finished proportioning and rewriting SiteCohorts for all sites: {stopwatch.ElapsedMilliseconds} ms");
             stopwatch.Reset();
+            string regenerationOccurredPath = $"./data/regeneration_occurred/{ModelCore.CurrentTime}.bin";
+            SiteVars.SerializeAsBincode(regenerationOccurredPath, ModelCore.CurrentTime, regenerationOccurred);
             string infectionOccurredPath = $"./data/infection_occurred/{ModelCore.CurrentTime}.bin";
             SiteVars.SerializeAsBincode(infectionOccurredPath, ModelCore.CurrentTime, infectionOccurred);
             globalTimer.Stop();
@@ -350,7 +353,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         private static (bool[] sitesForProportioning,
                         List<int> healthySitesListIndices,
                         List<int> infectedSitesListIndices,
-                        List<int> ignoredSitesListIndices) 
+                        List<int> ignoredSitesListIndices,
+                        byte[] regenerationOccurred) 
         InfectionStateDetection(IEnumerable<ActiveSite> sites, IInputParameters parameters, int landscapeX, int landscapeSize) {
             bool[] sitesForProportioning = new bool[landscapeSize];
             (ulong infected, ulong healthy, ulong ignored)[] biomass = new (ulong infected, ulong healthy, ulong ignored)[landscapeSize];
@@ -360,6 +364,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             List<int> healthySitesListIndices = new List<int>();
             List<int> infectedSitesListIndices = new List<int>();
             List<int> ignoredSitesListIndices = new List<int>();
+            byte[] regenerationOccurred = new byte[landscapeSize];
             Color[] colors = new Color[landscapeSize];
             foreach (ActiveSite site in sites) {
                 ulong healthyBiomass = 0;
@@ -367,10 +372,14 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 ulong ignoredBiomass = 0;
                 bool containsHealthySpecies = false;
                 bool containsInfectedSpecies = false;
+                Location siteLocation = site.Location;
+                int index = CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX);
+                bool siteHasRegeneration = false;
                 foreach (ISpeciesCohorts speciesCohorts in SiteVars.Cohorts[site]) {
                     foreach (ICohort cohort in speciesCohorts) {
                         if (cohort.Data.Age == 1) {
                             Log.Age1CSV(ModelCore.CurrentTime, cohort.Species.Name, cohort.Data.Age);
+                            siteHasRegeneration = true;
                         }
                         Log.StateCSV(ModelCore.CurrentTime, cohort.Species.Name, cohort.Data.Age);
                     }
@@ -395,13 +404,14 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                         }
                     }
                 }
+                if (siteHasRegeneration) {
+                    regenerationOccurred[index] = 1;
+                }
                 ulong totalBiomass = healthyBiomass + infectedBiomass + ignoredBiomass;
                 byte redIntensity = (byte)Math.Round(((double)infectedBiomass / (double)totalBiomass) * 255.0);
                 byte greenIntensity = (byte)Math.Round(((double)healthyBiomass / (double)totalBiomass) * 255.0);
                 byte blueIntensity = (byte)Math.Round(((double)ignoredBiomass / (double)totalBiomass) * 255.0);
                 Color color = Color.FromArgb(redIntensity, greenIntensity, blueIntensity);
-                Location siteLocation = site.Location;
-                int index = CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX);
                 colors[index] = color;
                 if (containsHealthySpecies && !containsInfectedSpecies) {
                     healthySitesList.Add((siteLocation.Column, siteLocation.Row));
@@ -511,7 +521,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 });
             }
 
-            return (sitesForProportioning, healthySitesListIndices, infectedSitesListIndices, ignoredSitesListIndices);
+            return (sitesForProportioning, healthySitesListIndices, infectedSitesListIndices, ignoredSitesListIndices, regenerationOccurred);
         }
         public override void AddCohortData() { return; }
     }
