@@ -172,6 +172,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
              List<int> infectedSitesListIndices,
              List<int> ignoredSitesListIndices) = 
                 InfectionStateDetection(sites, parameters, landscapeX, landscapeSize);
+            byte[] infectionOccurred = new byte[landscapeSize];
             Log.Info(LogType.General, $"Finished infection state detection: {stopwatch.ElapsedMilliseconds} ms");
             stopwatch.Reset();
 
@@ -265,6 +266,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 double random = rand.NextDouble();
                 if (random <= FOI[healthySiteIndex]) {
                     sitesForProportioning[healthySiteIndex] = true;
+                    infectionOccurred[healthySiteIndex] = 1;
                 }
             }
             
@@ -275,6 +277,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             ProportionSites(sites, sitesForProportioning, landscapeX, type, landscapeSize);
             Log.Info(LogType.General, $"Finished proportioning and rewriting SiteCohorts for all sites: {stopwatch.ElapsedMilliseconds} ms");
             stopwatch.Reset();
+            string infectionOccurredPath = $"./data/infection_occurred/{ModelCore.CurrentTime}.bin";
+            SiteVars.SerializeAsBincode(infectionOccurredPath, ModelCore.CurrentTime, infectionOccurred);
             globalTimer.Stop();
             Log.Info(LogType.General, $"DiseaseProgression timestep took: {globalTimer.ElapsedMilliseconds} ms");
         }

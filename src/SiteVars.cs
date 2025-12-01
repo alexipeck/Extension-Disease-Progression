@@ -505,6 +505,26 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
         }
 
+        public static void SerializeAsBincode(string outputPath, int timestep, byte[] data) {
+            int width = landscapeDimensions.x;
+            int height = landscapeDimensions.y;
+            ulong count = (ulong)((long)width * (long)height);
+            if (data == null) throw new ArgumentNullException(nameof(data));
+            if ((ulong)data.LongLength != count) throw new ArgumentException("Data length does not match width*height.");
+            string dir = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+            using (FileStream fs = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (BinaryWriter writer = new BinaryWriter(fs)) {
+                writer.Write((uint)timestep);
+                writer.Write((uint)width);
+                writer.Write((uint)height);
+                writer.Write(count);
+                for (long i = 0; i < data.LongLength; i++) {
+                    writer.Write(data[i]);
+                }
+            }
+        }
+
         public static void SerializeAsBincode(string outputPath, int timestep, List<(int x, int y)> healthySitesList, List<(int x, int y)> infectedSitesList, List<(int x, int y)> ignoredSitesList) {
             int width = landscapeDimensions.x;
             int height = landscapeDimensions.y;
@@ -861,6 +881,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
 
         public static void ProportionSites(IEnumerable<ActiveSite> sites, bool[] sitesForProportioning, int landscapeX, ExtensionType disturbanceType, int landscapeSize) {
             double[] mortalityTracker = new double[landscapeSize];
+            byte[] mortalityOccurred = new byte[landscapeSize];
             Dictionary<ISpecies, Dictionary<ushort, (int biomass, Dictionary<string, int> additionalParameters)>> newSiteCohortsDictionary = new Dictionary<ISpecies, Dictionary<ushort, (int biomass, Dictionary<string, int> additionalParameters)>>();
             foreach (ActiveSite site in sites) {
                 Location siteLocation = site.Location;
@@ -939,6 +960,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                                     totalBiomassAccountedFor += transfer;
                                 }
                                 mortalityTracker[index] += (double)concreteCohort.Data.Biomass * proportion;
+                                mortalityOccurred[index] = 1;
                                 //Console.WriteLine($"Transitioning some biomass to dead: {(double)concreteCohort.Data.Biomass * proportion}, biomass of cohort: {concreteCohort.Data.Biomass}, proportion: {proportion}");
                                 //TODO: Should I be feeding 1.0 for the proportion here so it kills the entire cohort in the case of where biomass == 1?
                                 Log.MortalityCSV(PlugIn.ModelCore.CurrentTime, speciesCohorts.Species.Name, concreteCohort.Data.Age);
@@ -1029,6 +1051,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
             string outputPath = $"./data/mortality/{PlugIn.ModelCore.CurrentTime}.bin";
             SerializeAsBincode(outputPath, PlugIn.ModelCore.CurrentTime, mortalityTrackerInt);
+            string mortalityOccurredPath = $"./data/mortality_occurred/{PlugIn.ModelCore.CurrentTime}.bin";
+            SerializeAsBincode(mortalityOccurredPath, PlugIn.ModelCore.CurrentTime, mortalityOccurred);
         }
     }
 }
