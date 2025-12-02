@@ -239,6 +239,17 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
 
             stopwatch.Start();
             double[] FOI = CalculateForceOfInfection(landscapeSize, SHIM);
+            foreach (int i in activeSiteIndices)
+            {
+                if (double.IsInfinity(FOI[i]))
+                {
+                    throw new InvalidOperationException($"FOI calculation produced Infinity for site index {i}. FOI[i]={FOI[i]}, SHIM[i]={SHIM[i]}. This indicates a calculation error that needs investigation.");
+                }
+                if (double.IsNaN(FOI[i]))
+                {
+                    FOI[i] = 0.0;
+                }
+            }
             Log.Info(LogType.General, $"Finished calculating FOI: {stopwatch.ElapsedMilliseconds} ms");
             stopwatch.Reset();
             ExportNumericalBitmap(FOI, "./images/foi_timeline/foi_state", "FOI");

@@ -328,6 +328,14 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                         * decay;
                 }
                 FOI[i] = beta_t * sum;
+                if (double.IsInfinity(FOI[i]))
+                {
+                    throw new InvalidOperationException($"FOI calculation produced Infinity for site index {i}. beta_t={beta_t}, sum={sum}, SHIM[i]={SHIM[i]}. This indicates a calculation error that needs investigation.");
+                }
+                if (double.IsNaN(FOI[i]))
+                {
+                    FOI[i] = 0.0;
+                }
                 /* Trace.Assert(
                     susceptibleProbability[i] + infectedProbability[i] + diseasedProbability[i] == 1.0,
                     $"SusceptibleProbability: {susceptibleProbability[i]}, InfectedProbability: {infectedProbability[i]}, DiseasedProbability: {diseasedProbability[i]}, total: {susceptibleProbability[i] + infectedProbability[i] + diseasedProbability[i]}"
