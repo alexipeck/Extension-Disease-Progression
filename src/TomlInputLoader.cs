@@ -182,6 +182,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             var groupHealthy = new Dictionary<string, ISpecies>(StringComparer.OrdinalIgnoreCase);
             var groupInfected = new Dictionary<string, HashSet<ISpecies>>(StringComparer.OrdinalIgnoreCase);
             var groupDataProvider = new Dictionary<string, DataProvider>(StringComparer.OrdinalIgnoreCase);
+            var groupDbhTimelines = new Dictionary<string, SortedDictionary<ushort, double>>(StringComparer.OrdinalIgnoreCase);
             foreach (var kv in groupTable) {
                 var groupName = kv.Key;
                 var groupConfig = kv.Value as IDictionary<string, object>;
@@ -219,6 +220,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     groupProvider = defaultDataProviderEnum;
                 }
                 groupDataProvider[groupName] = groupProvider;
+                var dbhTimeline = ParseGroupDbhTimeline(groupConfig, groupName, groupProvider == DataProvider.Softmax);
+                if (dbhTimeline != null) groupDbhTimelines[groupName] = dbhTimeline;
             }
 
             var preprocessedTable = GetNestedValue(transitionTable, new[] { "preprocessed" }, required: false) as IDictionary<string, object>;
@@ -310,55 +313,38 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     if (!groupDataProvider.TryGetValue(groupName, out DataProvider gp) || gp != DataProvider.Softmax) continue;
                     var table = kv.Value as IDictionary<string, object>;
                     if (table == null) throw new InputValueException($"transition.softmax.{sourceName}", $"[transition.softmax.{sourceName}] must be a table.");
+                    if (!groupDbhTimelines.TryGetValue(groupName, out var dbhTimeline) || dbhTimeline == null || dbhTimeline.Count == 0) throw new InputValueException($"transition.group.{groupName}", $"Softmax group '{groupName}' must define DBH values using 'age.dbh' entries.");
 
                     if (!softmaxParameters.ContainsKey(sourceSpecies)) softmaxParameters[sourceSpecies] = new Dictionary<ushort, List<(ISpecies, SoftmaxInputs)>>();
+                    var targetCoefficients = new List<(ISpecies target, double b0, double b1, double b2)>();
                     foreach (var entry in table) {
-                        string key = entry.Key.Trim();
-                        int dot = key.IndexOf('.');
-                        if (dot > 0 && dot < key.Length - 1) {
-                            string ageStr = key.Substring(0, dot).Trim();
-                            string targetName = key.Substring(dot + 1).Trim();
-                            if (!ushort.TryParse(ageStr, out ushort age)) throw new InputValueException(ageStr, $"Invalid age '{ageStr}' in [transition.softmax.{sourceName}].");
-                            var coeffsMap = entry.Value as IDictionary<string, object>;
-                            if (coeffsMap == null) throw new InputValueException($"transition.softmax.{sourceName}.{key}", $"Entry must be an inline table with keys b0, b1, dbh, b2.");
-                            if (!coeffsMap.TryGetValue("b0", out var b0Obj) || !coeffsMap.TryGetValue("b1", out var b1Obj) || !coeffsMap.TryGetValue("dbh", out var dbhObj) || !coeffsMap.TryGetValue("b2", out var b2Obj))
-                                throw new InputValueException($"transition.softmax.{sourceName}.{key}", $"Missing required coefficients; expected b0, b1, dbh, b2.");
-                            double b0 = Convert.ToDouble(b0Obj);
-                            double b1 = Convert.ToDouble(b1Obj);
-                            double dbh = Convert.ToDouble(dbhObj);
-                            double b2 = Convert.ToDouble(b2Obj);
+                        string targetName = entry.Key.Trim();
+                        if (targetName.IndexOf('.') >= 0) throw new InputValueException($"transition.softmax.{sourceName}.{targetName}", "Softmax coefficients must be specified per target without age prefixes.");
+                        var coeffsMap = entry.Value as IDictionary<string, object>;
+                        if (coeffsMap == null) throw new InputValueException($"transition.softmax.{sourceName}.{targetName}", $"Entry must be an inline table with keys b0, b1, b2.");
+                        if (!coeffsMap.TryGetValue("b0", out var b0Obj) || !coeffsMap.TryGetValue("b1", out var b1Obj) || !coeffsMap.TryGetValue("b2", out var b2Obj))
+                            throw new InputValueException($"transition.softmax.{sourceName}.{targetName}", $"Missing required coefficients; expected b0, b1, b2.");
+                        foreach (var coeffKey in coeffsMap.Keys) {
+                            if (string.Equals(coeffKey, "dbh", StringComparison.OrdinalIgnoreCase)) throw new InputValueException($"transition.softmax.{sourceName}.{targetName}", "Softmax coefficients no longer accept 'dbh'; provide DBH via transition.group 'age.dbh' entries.");
+                        }
+                        double b0 = Convert.ToDouble(b0Obj);
+                        double b1 = Convert.ToDouble(b1Obj);
+                        double b2 = Convert.ToDouble(b2Obj);
 
-                            ISpecies targetSpecies = null;
-                            if (!string.Equals(targetName, "DEAD", StringComparison.OrdinalIgnoreCase)) {
-                                if (!speciesNameToISpecies.TryGetValue(targetName, out targetSpecies)) throw new InputValueException(targetName, $"Species '{targetName}' in [transition.softmax.{sourceName}.{key}] does not exist.");
-                                if (!speciesToGroup.TryGetValue(targetSpecies, out string targetGroup) || !string.Equals(targetGroup, groupName, StringComparison.OrdinalIgnoreCase)) throw new InputValueException(targetName, $"Target species '{targetName}' must belong to the same group as source '{sourceName}'.");
-                            }
-                            if (!softmaxParameters[sourceSpecies].ContainsKey(age)) softmaxParameters[sourceSpecies][age] = new List<(ISpecies, SoftmaxInputs)>();
-                            softmaxParameters[sourceSpecies][age].Add((targetSpecies, new SoftmaxInputs(b0, b1, dbh, b2)));
-                        } else {
-                            string ageStr = key;
-                            if (!ushort.TryParse(ageStr, out ushort age)) throw new InputValueException(ageStr, $"Invalid age '{ageStr}' in [transition.softmax.{sourceName}].");
-                            var targetsMap = entry.Value as IDictionary<string, object>;
-                            if (targetsMap == null) throw new InputValueException($"transition.softmax.{sourceName}.{ageStr}", $"Entry must contain target species mapping to coefficients.");
-                            foreach (var tkv in targetsMap) {
-                                string targetName = tkv.Key.Trim();
-                                var coeffsMap = tkv.Value as IDictionary<string, object>;
-                                if (coeffsMap == null) throw new InputValueException($"transition.softmax.{sourceName}.{ageStr}.{targetName}", $"Entry must be an inline table with keys b0, b1, dbh, b2.");
-                                if (!coeffsMap.TryGetValue("b0", out var b0Obj) || !coeffsMap.TryGetValue("b1", out var b1Obj) || !coeffsMap.TryGetValue("dbh", out var dbhObj) || !coeffsMap.TryGetValue("b2", out var b2Obj))
-                                    throw new InputValueException($"transition.softmax.{sourceName}.{ageStr}.{targetName}", $"Missing required coefficients; expected b0, b1, dbh, b2.");
-                                double b0 = Convert.ToDouble(b0Obj);
-                                double b1 = Convert.ToDouble(b1Obj);
-                                double dbh = Convert.ToDouble(dbhObj);
-                                double b2 = Convert.ToDouble(b2Obj);
-
-                            ISpecies targetSpecies = null;
-                            if (!string.Equals(targetName, "DEAD", StringComparison.OrdinalIgnoreCase)) {
-                                if (!speciesNameToISpecies.TryGetValue(targetName, out targetSpecies)) throw new InputValueException(targetName, $"Species '{targetName}' in [transition.softmax.{sourceName}.{ageStr}.{targetName}] does not exist.");
-                                if (!speciesToGroup.TryGetValue(targetSpecies, out string targetGroup) || !string.Equals(targetGroup, groupName, StringComparison.OrdinalIgnoreCase)) throw new InputValueException(targetName, $"Target species '{targetName}' must belong to the same group as source '{sourceName}'.");
-                            }
-                            if (!softmaxParameters[sourceSpecies].ContainsKey(age)) softmaxParameters[sourceSpecies][age] = new List<(ISpecies, SoftmaxInputs)>();
-                            softmaxParameters[sourceSpecies][age].Add((targetSpecies, new SoftmaxInputs(b0, b1, dbh, b2)));
-                            }
+                        ISpecies targetSpecies = null;
+                        if (!string.Equals(targetName, "DEAD", StringComparison.OrdinalIgnoreCase)) {
+                            if (!speciesNameToISpecies.TryGetValue(targetName, out targetSpecies)) throw new InputValueException(targetName, $"Species '{targetName}' in [transition.softmax.{sourceName}.{targetName}] does not exist.");
+                            if (!speciesToGroup.TryGetValue(targetSpecies, out string targetGroup) || !string.Equals(targetGroup, groupName, StringComparison.OrdinalIgnoreCase)) throw new InputValueException(targetName, $"Target species '{targetName}' must belong to the same group as source '{sourceName}'.");
+                        }
+                        targetCoefficients.Add((targetSpecies, b0, b1, b2));
+                    }
+                    if (targetCoefficients.Count == 0) throw new InputValueException($"transition.softmax.{sourceName}", $"[transition.softmax.{sourceName}] must define at least one target.");
+                    foreach (var dbhEntry in dbhTimeline) {
+                        ushort age = dbhEntry.Key;
+                        double dbhValue = dbhEntry.Value;
+                        if (!softmaxParameters[sourceSpecies].ContainsKey(age)) softmaxParameters[sourceSpecies][age] = new List<(ISpecies, SoftmaxInputs)>();
+                        foreach (var coeff in targetCoefficients) {
+                            softmaxParameters[sourceSpecies][age].Add((coeff.target, new SoftmaxInputs(coeff.b0, coeff.b1, dbhValue, coeff.b2)));
                         }
                     }
                 }
@@ -517,6 +503,63 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             if (string.Equals(t, "anchored_power_law", StringComparison.OrdinalIgnoreCase)) return DistanceDispersalDecayKernel.SingleAnchoredPowerLaw;
             if (string.Equals(t, "double_anchored_power_law", StringComparison.OrdinalIgnoreCase)) return DistanceDispersalDecayKernel.DoubleAnchoredPowerLaw;
             throw new FormatException("Valid kernels: negative_exponent, power_law, anchored_power_law, double_anchored_power_law");
+        }
+
+        private static SortedDictionary<ushort, double> ParseGroupDbhTimeline(IDictionary<string, object> groupConfig, string groupName, bool required)
+        {
+            var dbhEntries = new SortedDictionary<ushort, double>();
+            foreach (var kv in groupConfig)
+            {
+                string key = kv.Key.Trim();
+                if (key.EndsWith(".dbh", StringComparison.OrdinalIgnoreCase))
+                {
+                    string agePart = key.Substring(0, key.Length - 4).Trim();
+                    if (!ushort.TryParse(agePart, out ushort age)) throw new InputValueException($"transition.group.{groupName}.{key}", $"Invalid DBH age '{agePart}'.");
+                    if (dbhEntries.ContainsKey(age)) throw new InputValueException($"transition.group.{groupName}.{key}", $"Duplicate DBH entry for age {age}.");
+                    dbhEntries[age] = ParseDbhValue(kv.Value, $"transition.group.{groupName}.{key}");
+                    continue;
+                }
+                if (kv.Value is IDictionary<string, object> nested && ushort.TryParse(key, out ushort nestedAge))
+                {
+                    object dbhValue = null;
+                    foreach (var nestedKv in nested)
+                    {
+                        if (string.Equals(nestedKv.Key, "dbh", StringComparison.OrdinalIgnoreCase))
+                        {
+                            dbhValue = nestedKv.Value;
+                            break;
+                        }
+                    }
+                    if (dbhValue == null) throw new InputValueException($"transition.group.{groupName}.{key}", $"DBH entry '[transition.group.{groupName}.{key}]' must include key 'dbh'.");
+                    if (dbhEntries.ContainsKey(nestedAge)) throw new InputValueException($"transition.group.{groupName}.{key}", $"Duplicate DBH entry for age {nestedAge}.");
+                    dbhEntries[nestedAge] = ParseDbhValue(dbhValue, $"transition.group.{groupName}.{key}.dbh");
+                }
+            }
+            if (dbhEntries.Count == 0)
+            {
+                if (required) throw new InputValueException($"transition.group.{groupName}", "Softmax groups must provide DBH values using 'age.dbh' entries.");
+                return null;
+            }
+            ushort expectedAge = 0;
+            foreach (var age in dbhEntries.Keys)
+            {
+                if (age != expectedAge) throw new InputValueException($"transition.group.{groupName}.{age}.dbh", "DBH ages must start at 0 and increase by 1 without gaps.");
+                expectedAge++;
+            }
+            return dbhEntries;
+        }
+
+        private static double ParseDbhValue(object value, string context)
+        {
+            if (value == null) throw new InputValueException(context, "Missing DBH value.");
+            try
+            {
+                return Convert.ToDouble(value);
+            }
+            catch (Exception)
+            {
+                throw new InputValueException(context, "DBH value must be numeric.");
+            }
         }
 
         private static bool TryGetCaseInsensitive(IDictionary<string, object> table, string key, out object value)
