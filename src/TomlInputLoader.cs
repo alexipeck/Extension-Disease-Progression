@@ -319,7 +319,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     var targetCoefficients = new List<(ISpecies target, double b0, double b1, double b2)>();
                     foreach (var entry in table) {
                         string targetName = entry.Key.Trim();
-                        if (targetName.IndexOf('.') >= 0) throw new InputValueException($"transition.softmax.{sourceName}.{targetName}", "Softmax coefficients must be specified per target without age prefixes.");
+                        int dotIndex = targetName.IndexOf('.');
+                        if (dotIndex > 0 && ushort.TryParse(targetName.Substring(0, dotIndex), out _)) throw new InputValueException($"transition.softmax.{sourceName}.{targetName}", "Softmax coefficients must be specified per target without age prefixes.");
                         var coeffsMap = entry.Value as IDictionary<string, object>;
                         if (coeffsMap == null) throw new InputValueException($"transition.softmax.{sourceName}.{targetName}", $"Entry must be an inline table with keys b0, b1, b2.");
                         if (!coeffsMap.TryGetValue("b0", out var b0Obj) || !coeffsMap.TryGetValue("b1", out var b1Obj) || !coeffsMap.TryGetValue("b2", out var b2Obj))
