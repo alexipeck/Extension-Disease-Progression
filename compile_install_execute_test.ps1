@@ -35,7 +35,6 @@ if ($LASTEXITCODE -ne 0) {
 
 Copy-Item -Path "$ProjectDir\bin\release\netstandard2.0\Landis.Extension.Disturbance.DiseaseProgression.dll" -Destination "$LandisExtensionsDir\" -Force
 Copy-Item -Path "$ProjectDir\bin\release\netstandard2.0\Tomlyn.dll" -Destination "$LandisExtensionsDir\" -Force
-Copy-Item -Path "$ProjectDir\bin\release\netstandard2.0\Newtonsoft.Json.dll" -Destination "$LandisExtensionsDir\" -Force
 
 cd $LandisExecutionDir
 $landisExitCode = $null

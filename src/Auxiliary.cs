@@ -137,7 +137,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression {
                 Stopwatch outputStopwatch = new Stopwatch();
                 outputStopwatch.Start();
                 try {
-                    string outputPath = $"{directory}/{PlugIn.ModelCore.CurrentTime}.json";
+                    string outputPath = $"{directory}/{PlugIn.ModelCore.CurrentTime}.bin";
                     SiteVars.SerializeAsBincode(outputPath, PlugIn.ModelCore.CurrentTime, dataCopy);
                 }
                 catch (Exception ex) {

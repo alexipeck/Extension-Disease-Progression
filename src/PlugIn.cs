@@ -288,9 +288,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             ProportionSites(sites, sitesForProportioning, landscapeX, type, landscapeSize);
             Log.Info(LogType.General, $"Finished proportioning and rewriting SiteCohorts for all sites: {stopwatch.ElapsedMilliseconds} ms");
             stopwatch.Reset();
-            string regenerationOccurredPath = $"./data/regeneration_occurred/{ModelCore.CurrentTime}.json";
+            string regenerationOccurredPath = $"./data/regeneration_occurred/{ModelCore.CurrentTime}.bin";
             SiteVars.SerializeAsBincode(regenerationOccurredPath, ModelCore.CurrentTime, regenerationOccurred);
-            string infectionOccurredPath = $"./data/infection_occurred/{ModelCore.CurrentTime}.json";
+            string infectionOccurredPath = $"./data/infection_occurred/{ModelCore.CurrentTime}.bin";
             SiteVars.SerializeAsBincode(infectionOccurredPath, ModelCore.CurrentTime, infectionOccurred);
             globalTimer.Stop();
             Log.Info(LogType.General, $"DiseaseProgression timestep took: {globalTimer.ElapsedMilliseconds} ms");
@@ -481,7 +481,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     Stopwatch outputStopwatch = new Stopwatch();
                     outputStopwatch.Start();
                     try {
-                        string outputPath = $"./data/infection/{modelCore.CurrentTime}.json";
+                        string outputPath = $"./data/infection/{modelCore.CurrentTime}.bin";
                         SerializeAsBincode(outputPath, modelCore.CurrentTime, healthySitesList, infectedSitesList, ignoredSitesList);
                     }
                     catch (Exception ex) {
@@ -498,7 +498,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     Stopwatch outputStopwatch = new Stopwatch();
                     outputStopwatch.Start();
                     try {
-                        SerializeAsBincode($"./data/biomass/{modelCore.CurrentTime}.json", modelCore.CurrentTime, biomass);
+                        SerializeAsBincode($"./data/biomass/{modelCore.CurrentTime}.bin", modelCore.CurrentTime, biomass);
                     }
                     catch (Exception ex) {
                         Log.Error(LogType.General, $"Biomass JSON output failed: {ex.Message}");
