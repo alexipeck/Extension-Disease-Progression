@@ -14,6 +14,7 @@ using System.Threading.Tasks;
 using log4net.Core;
 using System.Dynamic;
 using System.Runtime.InteropServices;
+using Newtonsoft.Json;
 
 namespace Landis.Extension.Disturbance.DiseaseProgression
 {
@@ -473,6 +474,77 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
         }
 
+        // JSON DTO classes matching Rust structs
+        private class F64MapDto {
+            [JsonProperty("timestep")]
+            public uint timestep { get; set; }
+            [JsonProperty("width")]
+            public uint width { get; set; }
+            [JsonProperty("height")]
+            public uint height { get; set; }
+            [JsonProperty("data")]
+            public double[] data { get; set; }
+        }
+
+        private class StateMapDto {
+            [JsonProperty("timestep")]
+            public uint timestep { get; set; }
+            [JsonProperty("width")]
+            public uint width { get; set; }
+            [JsonProperty("height")]
+            public uint height { get; set; }
+            [JsonProperty("data")]
+            public bool[] data { get; set; }
+        }
+
+        private class CoordinateDto {
+            public uint Item1 { get; set; }
+            public uint Item2 { get; set; }
+        }
+
+        private class BiomassTupleDto {
+            public ulong Item1 { get; set; }
+            public ulong Item2 { get; set; }
+            public ulong Item3 { get; set; }
+        }
+
+        private class InfectionStateMapDto {
+            [JsonProperty("timestep")]
+            public uint timestep { get; set; }
+            [JsonProperty("width")]
+            public uint width { get; set; }
+            [JsonProperty("height")]
+            public uint height { get; set; }
+            [JsonProperty("healthy_sites")]
+            public uint[][] healthy_sites { get; set; }
+            [JsonProperty("infected_sites")]
+            public uint[][] infected_sites { get; set; }
+            [JsonProperty("ignored_sites")]
+            public uint[][] ignored_sites { get; set; }
+        }
+
+        private class BiomassMapDto {
+            [JsonProperty("timestep")]
+            public uint timestep { get; set; }
+            [JsonProperty("width")]
+            public uint width { get; set; }
+            [JsonProperty("height")]
+            public uint height { get; set; }
+            [JsonProperty("biomass")]
+            public ulong[][] biomass { get; set; }
+        }
+
+        private class MortalityMapDto {
+            [JsonProperty("timestep")]
+            public uint timestep { get; set; }
+            [JsonProperty("width")]
+            public uint width { get; set; }
+            [JsonProperty("height")]
+            public uint height { get; set; }
+            [JsonProperty("data")]
+            public uint[] data { get; set; }
+        }
+
         public static void SerializeAsBincode(string outputPath, int timestep, double[] data) {
             int width = landscapeDimensions.x;
             int height = landscapeDimensions.y;
@@ -481,16 +553,14 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             if ((ulong)data.LongLength != count) throw new ArgumentException("Data length does not match width*height.");
             string dir = Path.GetDirectoryName(outputPath);
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-            using (FileStream fs = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.None))
-            using (BinaryWriter writer = new BinaryWriter(fs)) {
-                writer.Write((uint)timestep);
-                writer.Write((uint)width);
-                writer.Write((uint)height);
-                writer.Write(count);
-                for (long i = 0; i < data.LongLength; i++) {
-                    writer.Write(data[i]);
-                }
-            }
+            var dto = new F64MapDto {
+                timestep = (uint)timestep,
+                width = (uint)width,
+                height = (uint)height,
+                data = data
+            };
+            string json = JsonConvert.SerializeObject(dto);
+            File.WriteAllText(outputPath, json);
         }
 
         public static void SerializeAsBincode(string outputPath, int timestep, int[] data) {
@@ -501,36 +571,37 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             if ((ulong)data.LongLength != count) throw new ArgumentException("Data length does not match width*height.");
             string dir = Path.GetDirectoryName(outputPath);
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-            using (FileStream fs = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.None))
-            using (BinaryWriter writer = new BinaryWriter(fs)) {
-                writer.Write((uint)timestep);
-                writer.Write((uint)width);
-                writer.Write((uint)height);
-                writer.Write(count);
-                for (long i = 0; i < data.LongLength; i++) {
-                    writer.Write(data[i]);
-                }
-            }
+            var dto = new MortalityMapDto {
+                timestep = (uint)timestep,
+                width = (uint)width,
+                height = (uint)height,
+                data = Array.ConvertAll(data, x => (uint)x)
+            };
+            string json = JsonConvert.SerializeObject(dto);
+            File.WriteAllText(outputPath, json);
         }
 
         public static void SerializeAsBincode(string outputPath, int timestep, byte[] data) {
             int width = landscapeDimensions.x;
             int height = landscapeDimensions.y;
-            ulong count = (ulong)((long)width * (long)height);
+            long widthHeightProduct = (long)width * (long)height;
+            ulong count = (ulong)widthHeightProduct;
             if (data == null) throw new ArgumentNullException(nameof(data));
             if ((ulong)data.LongLength != count) throw new ArgumentException("Data length does not match width*height.");
             string dir = Path.GetDirectoryName(outputPath);
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-            using (FileStream fs = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.None))
-            using (BinaryWriter writer = new BinaryWriter(fs)) {
-                writer.Write((uint)timestep);
-                writer.Write((uint)width);
-                writer.Write((uint)height);
-                writer.Write(count);
-                for (long i = 0; i < data.LongLength; i++) {
-                    writer.Write(data[i]);
-                }
+            bool[] boolData = new bool[data.Length];
+            for (int i = 0; i < data.Length; i++) {
+                boolData[i] = data[i] != 0;
             }
+            var dto = new StateMapDto {
+                timestep = (uint)timestep,
+                width = (uint)width,
+                height = (uint)height,
+                data = boolData
+            };
+            string json = JsonConvert.SerializeObject(dto);
+            File.WriteAllText(outputPath, json);
         }
 
         public static void SerializeAsBincode(string outputPath, int timestep, List<(int x, int y)> healthySitesList, List<(int x, int y)> infectedSitesList, List<(int x, int y)> ignoredSitesList) {
@@ -542,37 +613,16 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             if (ignoredSitesList == null) throw new ArgumentNullException(nameof(ignoredSitesList));
             string dir = Path.GetDirectoryName(outputPath);
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-            using (FileStream fs = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.None))
-            using (BinaryWriter writer = new BinaryWriter(fs))
-            {
-                writer.Write((uint)timestep);
-                writer.Write((uint)width);
-                writer.Write((uint)height);
-                writer.Write((ulong)healthySitesList.Count);
-                for (int i = 0; i < healthySitesList.Count; i++) {
-                    int x = healthySitesList[i].x;
-                    int y = healthySitesList[i].y;
-                    if (x < 0 || y < 0) throw new ArgumentOutOfRangeException("Coordinates must be non-negative.");
-                    writer.Write((uint)x);
-                    writer.Write((uint)y);
-                }
-                writer.Write((ulong)infectedSitesList.Count);
-                for (int i = 0; i < infectedSitesList.Count; i++) {
-                    int x = infectedSitesList[i].x;
-                    int y = infectedSitesList[i].y;
-                    if (x < 0 || y < 0) throw new ArgumentOutOfRangeException("Coordinates must be non-negative.");
-                    writer.Write((uint)x);
-                    writer.Write((uint)y);
-                }
-                writer.Write((ulong)ignoredSitesList.Count);
-                for (int i = 0; i < ignoredSitesList.Count; i++) {
-                    int x = ignoredSitesList[i].x;
-                    int y = ignoredSitesList[i].y;
-                    if (x < 0 || y < 0) throw new ArgumentOutOfRangeException("Coordinates must be non-negative.");
-                    writer.Write((uint)x);
-                    writer.Write((uint)y);
-                }
-            }
+            var dto = new InfectionStateMapDto {
+                timestep = (uint)timestep,
+                width = (uint)width,
+                height = (uint)height,
+                healthy_sites = healthySitesList.Select(c => new uint[] { (uint)c.x, (uint)c.y }).ToArray(),
+                infected_sites = infectedSitesList.Select(c => new uint[] { (uint)c.x, (uint)c.y }).ToArray(),
+                ignored_sites = ignoredSitesList.Select(c => new uint[] { (uint)c.x, (uint)c.y }).ToArray()
+            };
+            string json = JsonConvert.SerializeObject(dto);
+            File.WriteAllText(outputPath, json);
         }
 
         public static void SerializeAsBincode(string outputPath, int timestep, (ulong infected, ulong healthy, ulong ignored)[] biomass) {
@@ -582,19 +632,14 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             if (biomass == null) throw new ArgumentNullException(nameof(biomass));
             string dir = Path.GetDirectoryName(outputPath);
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-            using (FileStream fs = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.None))
-            using (BinaryWriter writer = new BinaryWriter(fs))
-            {
-                writer.Write((uint)timestep);
-                writer.Write((uint)width);
-                writer.Write((uint)height);
-                writer.Write((ulong)biomass.Length);
-                for (int i = 0; i < biomass.Length; i++) {
-                    writer.Write(biomass[i].infected);
-                    writer.Write(biomass[i].healthy);
-                    writer.Write(biomass[i].ignored);
-                }
-            }
+            var dto = new BiomassMapDto {
+                timestep = (uint)timestep,
+                width = (uint)width,
+                height = (uint)height,
+                biomass = biomass.Select(b => new ulong[] { b.infected, b.healthy, b.ignored }).ToArray()
+            };
+            string json = JsonConvert.SerializeObject(dto);
+            File.WriteAllText(outputPath, json);
         }
 
         public static void GenerateBitmap(string outputPath, byte[] data) {
@@ -1057,9 +1102,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             for (int i = 0; i < landscapeSize; i++) {
                 mortalityTrackerInt[i] = (int)Math.Floor(mortalityTracker[i]);
             }
-            string outputPath = $"./data/mortality/{PlugIn.ModelCore.CurrentTime}.bin";
+            string outputPath = $"./data/mortality/{PlugIn.ModelCore.CurrentTime}.json";
             SerializeAsBincode(outputPath, PlugIn.ModelCore.CurrentTime, mortalityTrackerInt);
-            string mortalityOccurredPath = $"./data/mortality_occurred/{PlugIn.ModelCore.CurrentTime}.bin";
+            string mortalityOccurredPath = $"./data/mortality_occurred/{PlugIn.ModelCore.CurrentTime}.json";
             SerializeAsBincode(mortalityOccurredPath, PlugIn.ModelCore.CurrentTime, mortalityOccurred);
         }
     }

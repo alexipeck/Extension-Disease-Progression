@@ -281,7 +281,6 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     infectionOccurred[healthySiteIndex] = 1;
                 }
             }
-            
             Log.Info(LogType.General, $"Finished determining which sites are newly infected: {stopwatch.ElapsedMilliseconds} ms");
             ///////////////////
             
@@ -289,9 +288,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             ProportionSites(sites, sitesForProportioning, landscapeX, type, landscapeSize);
             Log.Info(LogType.General, $"Finished proportioning and rewriting SiteCohorts for all sites: {stopwatch.ElapsedMilliseconds} ms");
             stopwatch.Reset();
-            string regenerationOccurredPath = $"./data/regeneration_occurred/{ModelCore.CurrentTime}.bin";
+            string regenerationOccurredPath = $"./data/regeneration_occurred/{ModelCore.CurrentTime}.json";
             SiteVars.SerializeAsBincode(regenerationOccurredPath, ModelCore.CurrentTime, regenerationOccurred);
-            string infectionOccurredPath = $"./data/infection_occurred/{ModelCore.CurrentTime}.bin";
+            string infectionOccurredPath = $"./data/infection_occurred/{ModelCore.CurrentTime}.json";
             SiteVars.SerializeAsBincode(infectionOccurredPath, ModelCore.CurrentTime, infectionOccurred);
             globalTimer.Stop();
             Log.Info(LogType.General, $"DiseaseProgression timestep took: {globalTimer.ElapsedMilliseconds} ms");
@@ -482,7 +481,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     Stopwatch outputStopwatch = new Stopwatch();
                     outputStopwatch.Start();
                     try {
-                        string outputPath = $"./data/infection/{modelCore.CurrentTime}.bin";
+                        string outputPath = $"./data/infection/{modelCore.CurrentTime}.json";
                         SerializeAsBincode(outputPath, modelCore.CurrentTime, healthySitesList, infectedSitesList, ignoredSitesList);
                     }
                     catch (Exception ex) {
@@ -499,10 +498,10 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     Stopwatch outputStopwatch = new Stopwatch();
                     outputStopwatch.Start();
                     try {
-                        SerializeAsBincode($"./data/biomass/{modelCore.CurrentTime}.bin", modelCore.CurrentTime, biomass);
+                        SerializeAsBincode($"./data/biomass/{modelCore.CurrentTime}.json", modelCore.CurrentTime, biomass);
                     }
                     catch (Exception ex) {
-                        Log.Error(LogType.General, $"Biomass bincode output failed: {ex.Message}");
+                        Log.Error(LogType.General, $"Biomass JSON output failed: {ex.Message}");
                         throw;
                     }
                     outputStopwatch.Stop();
@@ -537,3 +536,4 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         public override void AddCohortData() { return; }
     }
 }
+
