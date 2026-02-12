@@ -254,8 +254,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 divisor++;
             }
             
-            if (divisor == 0) return 0.0f;
-            return sum / divisor;
+            if (divisor == 0) return MathGuard.WarnAndReturnZero($"CalculateSiteHostIndexMean site ({site.Location.Column},{site.Location.Row}) divisor is 0");
+            return MathGuard.DivideOrZero(sum, divisor, $"CalculateSiteHostIndexMean site ({site.Location.Column},{site.Location.Row})");
         }
         public static void SetDefaultProbabilities(List<int> healthySitesListIndices, List<int> infectedSitesListIndices, List<int> ignoredSitesListIndices) {
             bool[] infected = new bool[landscapeDimensions.x * landscapeDimensions.y];
@@ -307,7 +307,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             double[] infectedProbabilityNew = new double[landscapeSize];
             double[] diseasedProbabilityNew = new double[landscapeSize];
             Parallel.ForEach(activeSiteIndices, i => {
-                double beta_t = 1/* normalizedWeatherIndex[i] */ * transmissionRate;
+                double beta_t = MathGuard.RequireFinite(1/* normalizedWeatherIndex[i] */ * transmissionRate, $"FOI beta_t site index {i}");
                 double sum = 0.0;
                 (int x, int y) targetCoordinates = precomputedLandscapeCoordinates[i];
                 foreach ((int x, int y) in precomputedDispersalDistanceOffsets) {
@@ -322,27 +322,21 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     (int x, int y) canonicalizedRelativeCoordinates = CanonicalizeToHalfQuadrant(x, y);
                     if (canonicalizedRelativeCoordinates.x >= distanceDispersalDecayMatrixWidth || canonicalizedRelativeCoordinates.y >= distanceDispersalDecayMatrixHeight) continue;
                     double decay = GetDistanceDispersalDecay(CalculateCoordinatesToIndex(canonicalizedRelativeCoordinates.x, canonicalizedRelativeCoordinates.y, distanceDispersalDecayMatrixWidth));
-                    sum += SHIM[i]
+                    double contribution = SHIM[i]
                         * SHIM[j]
                         * (infectedProbability[j] + diseasedProbability[j])
                         * decay;
+                    contribution = MathGuard.RequireFinite(contribution, $"FOI contribution site index {i}, neighbor index {j}");
+                    sum = MathGuard.RequireFinite(sum + contribution, $"FOI running sum site index {i}");
                 }
-                FOI[i] = beta_t * sum;
-                if (double.IsInfinity(FOI[i]))
-                {
-                    throw new InvalidOperationException($"FOI calculation produced Infinity for site index {i}. beta_t={beta_t}, sum={sum}, SHIM[i]={SHIM[i]}. This indicates a calculation error that needs investigation.");
-                }
-                if (double.IsNaN(FOI[i]))
-                {
-                    FOI[i] = 0.0;
-                }
+                FOI[i] = MathGuard.RequireFinite(beta_t * sum, $"FOI site index {i}");
                 /* Trace.Assert(
                     susceptibleProbability[i] + infectedProbability[i] + diseasedProbability[i] == 1.0,
                     $"SusceptibleProbability: {susceptibleProbability[i]}, InfectedProbability: {infectedProbability[i]}, DiseasedProbability: {diseasedProbability[i]}, total: {susceptibleProbability[i] + infectedProbability[i] + diseasedProbability[i]}"
                 ); */
-                susceptibleProbabilityNew[i] = susceptibleProbability[i] - (FOI[i] * susceptibleProbability[i] * timeStep);
-                infectedProbabilityNew[i] = infectedProbability[i] + ((FOI[i] * susceptibleProbability[i] * timeStep) - (diseaseProgressionRatePerUnitTime * (infectedProbability[i] * timeStep)));
-                diseasedProbabilityNew[i] = diseasedProbability[i] + (diseaseProgressionRatePerUnitTime * infectedProbability[i] * timeStep);
+                susceptibleProbabilityNew[i] = MathGuard.RequireFinite(susceptibleProbability[i] - (FOI[i] * susceptibleProbability[i] * timeStep), $"Susceptible probability update site index {i}");
+                infectedProbabilityNew[i] = MathGuard.RequireFinite(infectedProbability[i] + ((FOI[i] * susceptibleProbability[i] * timeStep) - (diseaseProgressionRatePerUnitTime * (infectedProbability[i] * timeStep))), $"Infected probability update site index {i}");
+                diseasedProbabilityNew[i] = MathGuard.RequireFinite(diseasedProbability[i] + (diseaseProgressionRatePerUnitTime * infectedProbability[i] * timeStep), $"Diseased probability update site index {i}");
             });
             susceptibleProbability = susceptibleProbabilityNew;
             infectedProbability = infectedProbabilityNew;
@@ -410,9 +404,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 }
             };
             //normalize
-            for (int x = 0; x < dispersalProbabilityMatrixLength; x++) {
+            /* for (int x = 0; x < dispersalProbabilityMatrixLength; x++) {
                 dispersalLookupMatrix[x] /= totalProbability;
-            }
+            } */
             Log.Info(LogType.General, $"Generated dispersal matrix with {dispersalLookupMatrixCount} entries");
             
             return dispersalLookupMatrix;
@@ -744,8 +738,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     for (int i = 0; i < landscapeSize; i++) {
                         (int x, int y) coordinates = CalculateIndexToCoordinates(i, width);
                         double v = intensities[i];
-                        if (double.IsNaN(v) || double.IsInfinity(v)) v = 0.0;
+                        if (double.IsNaN(v) || double.IsInfinity(v)) v = MathGuard.WarnAndReturnZero($"GenerateIntensityBitmap input intensity index {i} is non-finite");
                         double n = useMinMax ? (v - min) / (max - min) : v;
+                        if (double.IsNaN(n) || double.IsInfinity(n)) n = MathGuard.WarnAndReturnZero($"GenerateIntensityBitmap normalized intensity index {i} is non-finite");
                         if (n < 0.0) n = 0.0; else if (n > 1.0) n = 1.0;
                         byte intensity = (byte)Math.Round(n * 255.0);
                         for (int k = 0; k < scaleFactor; k++) {

@@ -228,10 +228,16 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     sum += SHIM[j];
                     count++;
                 }
-                double SHIMMean = sum / count;
-                //TODO: Consider adding a branch to skip if SHIM[i] isn't more
-                //      than 0 but mathematically it's fine unless SHIMMean is 0
-                SHIM[i] /= SHIMMean;
+                if (count == 0) {
+                    SHIM[i] = MathGuard.WarnAndReturnZero($"SHIM normalization site index {i} has zero neighbor count");
+                    continue;
+                }
+                double SHIMMean = MathGuard.DivideOrZero(sum, count, $"SHIM normalization mean site index {i}");
+                if (SHIMMean == 0.0) {
+                    SHIM[i] = MathGuard.WarnAndReturnZero($"SHIM normalization site index {i} has SHIMMean 0");
+                    continue;
+                }
+                SHIM[i] = MathGuard.RequireFinite(SHIM[i] / SHIMMean, $"SHIM normalization site index {i}");
             }
             Log.Info(LogType.General, $"Finished normalizing SHIM: {stopwatch.ElapsedMilliseconds} ms");
             stopwatch.Reset();
@@ -241,14 +247,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             double[] FOI = CalculateForceOfInfection(landscapeSize, SHIM);
             foreach (int i in activeSiteIndices)
             {
-                if (double.IsInfinity(FOI[i]))
-                {
-                    throw new InvalidOperationException($"FOI calculation produced Infinity for site index {i}. FOI[i]={FOI[i]}, SHIM[i]={SHIM[i]}. This indicates a calculation error that needs investigation.");
-                }
-                if (double.IsNaN(FOI[i]))
-                {
-                    FOI[i] = 0.0;
-                }
+                FOI[i] = MathGuard.RequireFinite(FOI[i], $"FOI post-calc site index {i}");
             }
             Log.Info(LogType.General, $"Finished calculating FOI: {stopwatch.ElapsedMilliseconds} ms");
             stopwatch.Reset();
@@ -263,7 +262,8 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                 }
             } else {
                 foreach (int i in activeSiteIndices) {
-                    FOIScaled[i] = (FOI[i] - FOImin) / range;
+                    double scaled = MathGuard.DivideOrZero(FOI[i] - FOImin, range, $"FOI scaling site index {i}");
+                    FOIScaled[i] = MathGuard.RequireFinite(scaled, $"FOI scaled site index {i}");
                 }
             }
             //TODO: Why did I do this?
@@ -275,6 +275,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             stopwatch.Start();
             foreach (int healthySiteIndex in healthySitesListIndices) {
                 if (FOI[healthySiteIndex] == 0.0) continue;
+                MathGuard.RequireFinite(FOI[healthySiteIndex], $"FOI infection comparison site index {healthySiteIndex}");
                 double random = rand.NextDouble();
                 if (random <= FOI[healthySiteIndex]) {
                     sitesForProportioning[healthySiteIndex] = true;
@@ -418,9 +419,12 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     regenerationOccurred[index] = 1;
                 }
                 ulong totalBiomass = healthyBiomass + infectedBiomass + ignoredBiomass;
-                byte redIntensity = (byte)Math.Round(((double)infectedBiomass / (double)totalBiomass) * 255.0);
-                byte greenIntensity = (byte)Math.Round(((double)healthyBiomass / (double)totalBiomass) * 255.0);
-                byte blueIntensity = (byte)Math.Round(((double)ignoredBiomass / (double)totalBiomass) * 255.0);
+                double redRatio = MathGuard.DivideOrZero(infectedBiomass, (double)totalBiomass, $"Infection bitmap red ratio site index {index}");
+                double greenRatio = MathGuard.DivideOrZero(healthyBiomass, (double)totalBiomass, $"Infection bitmap green ratio site index {index}");
+                double blueRatio = MathGuard.DivideOrZero(ignoredBiomass, (double)totalBiomass, $"Infection bitmap blue ratio site index {index}");
+                byte redIntensity = (byte)Math.Round(MathGuard.RequireFinite(redRatio, $"Infection bitmap red finite site index {index}") * 255.0);
+                byte greenIntensity = (byte)Math.Round(MathGuard.RequireFinite(greenRatio, $"Infection bitmap green finite site index {index}") * 255.0);
+                byte blueIntensity = (byte)Math.Round(MathGuard.RequireFinite(blueRatio, $"Infection bitmap blue finite site index {index}") * 255.0);
                 Color color = Color.FromArgb(redIntensity, greenIntensity, blueIntensity);
                 colors[index] = color;
                 if (containsHealthySpecies && !containsInfectedSpecies) {

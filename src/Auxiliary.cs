@@ -174,7 +174,9 @@ namespace Landis.Extension.Disturbance.DiseaseProgression {
                     for (int i = 0; i < targetMap.Count; i++) {
                         (ISpecies, SoftmaxInputs) target = targetMap[i];
                         SoftmaxInputs softmaxInputs = target.Item2;
-                        exponentialLinearPredictors[species][age][i] = (target.Item1, Math.Exp(softmaxInputs.B0 + (softmaxInputs.B1 * softmaxInputs.DBH) + softmaxInputs.B2));
+                        double expValue = Math.Exp(softmaxInputs.B0 + (softmaxInputs.B1 * softmaxInputs.DBH) + softmaxInputs.B2);
+                        expValue = MathGuard.RequireFinite(expValue, $"Softmax exponential source species {(species == null ? "DEAD" : species.Name)}, age {age}, target {(target.Item1 == null ? "DEAD" : target.Item1.Name)}");
+                        exponentialLinearPredictors[species][age][i] = (target.Item1, expValue);
                     }
 				}
 			}
@@ -193,7 +195,12 @@ namespace Landis.Extension.Disturbance.DiseaseProgression {
                                 //ageEntryMinusSelf.Add(transition);
                             }
                         }
-                        double value = predictor.Item2 / (1 + sumOfOtherLinearPredictors);
+                        double denominator = MathGuard.RequireFinite(1 + sumOfOtherLinearPredictors, $"Softmax denominator source species {(species == null ? "DEAD" : species.Name)}, age {age}");
+                        if (denominator <= 0.0) {
+                            Log.Error(LogType.Math, $"Softmax denominator is non-positive for source species {(species == null ? "DEAD" : species.Name)}, age {age}, denominator {denominator}");
+                            throw new InvalidOperationException($"Softmax denominator is non-positive for source species {(species == null ? "DEAD" : species.Name)}, age {age}, denominator {denominator}");
+                        }
+                        double value = MathGuard.RequireFinite(predictor.Item2 / denominator, $"Softmax normalized value source species {(species == null ? "DEAD" : species.Name)}, age {age}, target {(predictor.Item1 == null ? "DEAD" : predictor.Item1.Name)}");
                         if (!transitions.ContainsKey(species)) transitions[species] = new Dictionary<ushort, List<(ISpecies, double)>>();
                         if (!transitions[species].ContainsKey(age)) transitions[species][age] = new List<(ISpecies, double)>();
                         transitions[species][age].Add((predictor.Item1, value));

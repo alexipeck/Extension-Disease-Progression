@@ -12,7 +12,8 @@ public enum LogType
     Transitions,
     Timing,
     General,
-    Infection
+    Infection,
+    Math
 }
 
 public enum CSVLogType
