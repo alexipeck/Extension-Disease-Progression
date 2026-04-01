@@ -20,7 +20,8 @@ public enum CSVLogType
 {
     Age1,
     Mortality,
-    State
+    State,
+    Biomass
 }
 
 public static class Log
@@ -108,6 +109,8 @@ public static class Log
                     sw.WriteLine("Timestep,Species,Age");
                 if (ct == CSVLogType.State)
                     sw.WriteLine("Timestep,Species,Age");
+                if (ct == CSVLogType.Biomass)
+                    sw.WriteLine("Timestep,Species,Biomass");
             }
 
             _queue = new BlockingCollection<LogItem>(new ConcurrentQueue<LogItem>());
@@ -205,6 +208,7 @@ public static class Log
     public static void MortalityCSV(int timestep, string species, ushort age) { WriteCSV(CSVLogType.Mortality, $"{timestep},{species},{age}"); }
     public static void StateCSV(int timestep, string species, ushort age) { WriteCSV(CSVLogType.State, $"{timestep},{species},{age}"); }
     public static void Age1CSV(int timestep, string species, ushort age) { WriteCSV(CSVLogType.Age1, $"{timestep},{species},{age}"); }
+    public static void BiomassCSV(int timestep, string species, ulong biomass) { WriteCSV(CSVLogType.Biomass, $"{timestep},{species},{biomass}"); }
     public static void Info(LogType type, string msg)  { Write(type, "INFO  " + msg); }
     public static void Warn(LogType type, string msg)  { Write(type, "WARN  " + msg); }
     public static void Error(LogType type, string msg) { Write(type, "ERROR " + msg); }

@@ -369,6 +369,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         InfectionStateDetection(IEnumerable<ActiveSite> sites, IInputParameters parameters, int landscapeX, int landscapeSize) {
             bool[] sitesForProportioning = new bool[landscapeSize];
             (ulong infected, ulong healthy, ulong ignored)[] biomass = new (ulong infected, ulong healthy, ulong ignored)[landscapeSize];
+            Dictionary<ISpecies, ulong> biomassBySpecies = new Dictionary<ISpecies, ulong>();
             List<(int x, int y)> healthySitesList = new List<(int x, int y)>();
             List<(int x, int y)> infectedSitesList = new List<(int x, int y)>();
             List<(int x, int y)> ignoredSitesList = new List<(int x, int y)>();
@@ -393,6 +394,11 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                             siteHasRegeneration = true;
                         }
                         Log.StateCSV(ModelCore.CurrentTime, cohort.Species.Name, cohort.Data.Age);
+                        if (cohort.Data.Biomass < 0) throw new ArgumentException($"Negative biomass detected: {cohort.Data.Biomass}");
+                        if (!biomassBySpecies.ContainsKey(cohort.Species)) {
+                            biomassBySpecies[cohort.Species] = 0;
+                        }
+                        biomassBySpecies[cohort.Species] += (ulong)cohort.Data.Biomass;
                     }
                     ISpecies designatedHealthySpecies = parameters.GetDesignatedHealthySpecies(speciesCohorts.Species);
                     //Console.WriteLine($"Looking at species: {speciesCohorts.Species.Name}{(designatedHealthySpecies != null ? $", it's designated healthy species is: {designatedHealthySpecies.Name}" : "")}");
@@ -442,6 +448,10 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                     throw new ArgumentException($"Negative biomass detected: healthy={healthyBiomass}, infected={infectedBiomass}, ignored={ignoredBiomass}");
                 }
                 biomass[index] = (infectedBiomass, healthyBiomass, ignoredBiomass);
+            }
+
+            foreach (var speciesBiomass in biomassBySpecies.OrderBy(entry => entry.Key.Name)) {
+                Log.BiomassCSV(ModelCore.CurrentTime, speciesBiomass.Key.Name, speciesBiomass.Value);
             }
 
             {
@@ -540,4 +550,3 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
         public override void AddCohortData() { return; }
     }
 }
-
