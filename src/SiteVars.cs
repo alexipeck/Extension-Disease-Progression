@@ -970,7 +970,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                                 mortalityOccurred[index] = 1;
                                 //Console.WriteLine($"Transitioning some biomass to dead: {(double)concreteCohort.Data.Biomass * proportion}, biomass of cohort: {concreteCohort.Data.Biomass}, proportion: {proportion}");
                                 //TODO: Should I be feeding 1.0 for the proportion here so it kills the entire cohort in the case of where biomass == 1?
-                                Log.MortalityCSV(PlugIn.ModelCore.CurrentTime, speciesCohorts.Species.Name, concreteCohort.Data.Age);
+                                Log.MortalityCSV(PlugIn.ModelCore.CurrentTime, speciesCohorts.Species.Name, concreteCohort.Data.Age, transfer);
                                 Cohort.CohortMortality(concreteSpeciesCohorts, concreteCohort, site, disturbanceType, (float)proportion);
                                 Log.Info(LogType.Transitions, $"Transitioned to dead: Age: {concreteCohort.Data.Age}, Biomass: {concreteCohort.Data.Biomass}, Species: {speciesCohorts.Species.Name}");
                                 AddResproutLifetime(CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX), designatedHealthySpecies);

@@ -399,6 +399,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                             biomassBySpecies[cohort.Species] = 0;
                         }
                         biomassBySpecies[cohort.Species] += (ulong)cohort.Data.Biomass;
+                        Log.BiomassDetailCSV(ModelCore.CurrentTime, cohort.Species.Name, cohort.Data.Age, (ulong)cohort.Data.Biomass);
                     }
                     ISpecies designatedHealthySpecies = parameters.GetDesignatedHealthySpecies(speciesCohorts.Species);
                     //Console.WriteLine($"Looking at species: {speciesCohorts.Species.Name}{(designatedHealthySpecies != null ? $", it's designated healthy species is: {designatedHealthySpecies.Name}" : "")}");
@@ -451,7 +452,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             }
 
             foreach (var speciesBiomass in biomassBySpecies.OrderBy(entry => entry.Key.Name)) {
-                Log.BiomassCSV(ModelCore.CurrentTime, speciesBiomass.Key.Name, speciesBiomass.Value);
+                Log.BiomassSummaryCSV(ModelCore.CurrentTime, speciesBiomass.Key.Name, speciesBiomass.Value);
             }
 
             {
