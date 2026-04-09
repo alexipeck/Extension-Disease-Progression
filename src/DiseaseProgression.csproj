@@ -33,8 +33,8 @@
     <Reference Include="Landis.Library.UniversalCohorts-v2">
       <HintPath>..\lib\Landis.Library.UniversalCohorts-v2.dll</HintPath>
     </Reference>
-    <Reference Include="Landis.Library.Succession-v9">
-      <HintPath>..\lib\Landis.Library.Succession-v9.dll</HintPath>
+    <Reference Include="Landis.Library.Succession-v10">
+      <HintPath>..\lib\Landis.Library.Succession-v10.dll</HintPath>
     </Reference>
   </ItemGroup>
 </Project>
