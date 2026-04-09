@@ -370,6 +370,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             bool[] sitesForProportioning = new bool[landscapeSize];
             (ulong infected, ulong healthy, ulong ignored)[] biomass = new (ulong infected, ulong healthy, ulong ignored)[landscapeSize];
             Dictionary<ISpecies, ulong> biomassBySpecies = new Dictionary<ISpecies, ulong>();
+            Dictionary<(ISpecies species, ushort age), ulong> biomassBySpeciesAge = new Dictionary<(ISpecies species, ushort age), ulong>();
             List<(int x, int y)> healthySitesList = new List<(int x, int y)>();
             List<(int x, int y)> infectedSitesList = new List<(int x, int y)>();
             List<(int x, int y)> ignoredSitesList = new List<(int x, int y)>();
@@ -399,7 +400,10 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                             biomassBySpecies[cohort.Species] = 0;
                         }
                         biomassBySpecies[cohort.Species] += (ulong)cohort.Data.Biomass;
-                        Log.BiomassDetailCSV(ModelCore.CurrentTime, cohort.Species.Name, cohort.Data.Age, (ulong)cohort.Data.Biomass);
+                        var speciesAgeKey = (cohort.Species, cohort.Data.Age);
+                        if (!biomassBySpeciesAge.ContainsKey(speciesAgeKey))
+                            biomassBySpeciesAge[speciesAgeKey] = 0;
+                        biomassBySpeciesAge[speciesAgeKey] += (ulong)cohort.Data.Biomass;
                     }
                     ISpecies designatedHealthySpecies = parameters.GetDesignatedHealthySpecies(speciesCohorts.Species);
                     //Console.WriteLine($"Looking at species: {speciesCohorts.Species.Name}{(designatedHealthySpecies != null ? $", it's designated healthy species is: {designatedHealthySpecies.Name}" : "")}");
@@ -453,6 +457,10 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
 
             foreach (var speciesBiomass in biomassBySpecies.OrderBy(entry => entry.Key.Name)) {
                 Log.BiomassSummaryCSV(ModelCore.CurrentTime, speciesBiomass.Key.Name, speciesBiomass.Value);
+            }
+
+            foreach (var entry in biomassBySpeciesAge.OrderBy(e => e.Key.species.Name).ThenBy(e => e.Key.age)) {
+                Log.BiomassDetailCSV(ModelCore.CurrentTime, entry.Key.species.Name, entry.Key.age, entry.Value);
             }
 
             {
