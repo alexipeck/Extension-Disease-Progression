@@ -972,7 +972,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                                 //TODO: Should I be feeding 1.0 for the proportion here so it kills the entire cohort in the case of where biomass == 1?
                                 Log.MortalityCSV(PlugIn.ModelCore.CurrentTime, speciesCohorts.Species.Name, concreteCohort.Data.Age, transfer);
                                 Cohort.CohortMortality(concreteSpeciesCohorts, concreteCohort, site, disturbanceType, (float)proportion);
-                                Log.Info(LogType.Transitions, $"Transitioned to dead: Age: {concreteCohort.Data.Age}, Biomass: {concreteCohort.Data.Biomass}, Species: {speciesCohorts.Species.Name}");
+                                Log.TransitionsCSV(PlugIn.ModelCore.CurrentTime, speciesCohorts.Species.Name, "DEAD", concreteCohort.Data.Age, transfer);
                                 AddResproutLifetime(CalculateCoordinatesToIndex(siteLocation.Column - 1, siteLocation.Row - 1, landscapeX), designatedHealthySpecies);
                                 continue; //short-circuit
                             }
@@ -1007,7 +1007,7 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
                                 newSiteCohortsDictionary[speciesCohorts.Species][concreteCohort.Data.Age] = (0, new Dictionary<string, int>());
                             }
                             newSiteCohortsDictionary[targetSpecies][concreteCohort.Data.Age] = entry;
-                            Log.Info(LogType.Transitions, $"Transferred {transfer} biomass from {speciesCohorts.Species.Name} to {targetSpecies.Name}");
+                            Log.TransitionsCSV(PlugIn.ModelCore.CurrentTime, speciesCohorts.Species.Name, targetSpecies.Name, concreteCohort.Data.Age, transfer);
                             
                         }
                         //push remaining biomass to original species cohort

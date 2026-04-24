@@ -123,7 +123,6 @@ namespace Landis.Extension.Disturbance.DiseaseProgression
             ////////
             Log.Info(LogType.General, $"Running timestep (marker for general): {ModelCore.CurrentTime}");
             Log.Info(LogType.Timing, $"Running timestep (marker for timing): {ModelCore.CurrentTime}");
-            Log.Info(LogType.Transitions, $"Running timestep (marker for transitions): {ModelCore.CurrentTime}");
             int distanceDispersalDecayMatrixWidth = DistanceDispersalDecayMatrixWidth;
             int distanceDispersalDecayMatrixHeight = DistanceDispersalDecayMatrixHeight;
             IEnumerable<ActiveSite> sites = ModelCore.Landscape.ActiveSites;

@@ -9,7 +9,6 @@ using System.Collections.Generic;
 
 public enum LogType
 {
-    Transitions,
     Timing,
     General,
     Infection,
@@ -18,6 +17,7 @@ public enum LogType
 
 public enum CSVLogType
 {
+    Transitions,
     Age1,
     Mortality,
     State,
@@ -104,6 +104,8 @@ public static class Log
                 _csvPaths[ct] = path;
                 var sw = CreateWriter(path);
                 _csvWriters[ct] = sw;
+                if (ct == CSVLogType.Transitions)
+                    sw.WriteLine("Timestep,From,To,Age,Biomass");
                 if (ct == CSVLogType.Age1)
                     sw.WriteLine("Timestep,Species,Age");
                 if (ct == CSVLogType.Mortality)
@@ -208,6 +210,7 @@ public static class Log
 
         _queue.Add(new LogItem { Type = type, Line = line });
     }
+    public static void TransitionsCSV(int timestep, string sourceSpecies, string targetSpecies, ushort age, int biomass) { WriteCSV(CSVLogType.Transitions, $"{timestep},{sourceSpecies},{targetSpecies},{age},{biomass}"); }
     public static void MortalityCSV(int timestep, string species, ushort age, int biomassKilled) { WriteCSV(CSVLogType.Mortality, $"{timestep},{species},{age},{biomassKilled}"); }
     public static void StateCSV(int timestep, string species, ushort age) { WriteCSV(CSVLogType.State, $"{timestep},{species},{age}"); }
     public static void Age1CSV(int timestep, string species, ushort age) { WriteCSV(CSVLogType.Age1, $"{timestep},{species},{age}"); }
